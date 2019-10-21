@@ -22,7 +22,23 @@ struct mandelbrot_parameters {
     float pos_y = 0.0;
 };
 
-mandelbrot_parameters m;
+mandelbrot_parameters m_params;
+
+struct sliders_parameters {
+    int iterations_min = 2;
+    int iterations_max = 600;
+    int iterations_default_actual = (iterations_max - iterations_min) / 2;
+    float iterations_default_relative = 0.5;
+
+    float center_min = -1.0;
+    float center_max = 1.0;
+    float center_x_default_relative = (m_params.center_x + 1) / 2;
+    float center_y_default_relative = (m_params.center_y + 1) / 2;
+    float center_x_default_actual = m_params.center_x;
+    float center_y_default_actual = m_params.center_y;
+};
+
+sliders_parameters s_params;
 
 bool button_pressed = false;
 
@@ -31,12 +47,12 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         double x, y;
         glfwGetCursorPos(window, &x, &y);
 
-        auto window_width = (float) m.window_width;
-        auto window_height = (float) m.window_height;
+        auto window_width = (float) m_params.window_width;
+        auto window_height = (float) m_params.window_height;
 
         if (action == GLFW_PRESS) {
-            m.pos_x = 2.0 * (static_cast<float>(x) / window_width - 0.5);
-            m.pos_y = 2.0 * (static_cast<float>(y) / window_height - 0.5);
+            m_params.pos_x = 2.0 * (static_cast<float>(x) / window_width - 0.5);
+            m_params.pos_y = 2.0 * (static_cast<float>(y) / window_height - 0.5);
             button_pressed = true;
         } else if (action == GLFW_RELEASE) {
             button_pressed = false;
@@ -56,12 +72,12 @@ void mouse_drag(GLFWwindow* window) {
     float fx = 2.0 * (static_cast<float>(x) / window_width - 0.5);
     float fy = 2.0 * (static_cast<float>(y) / window_height - 0.5);
 
-    float speed = m.scale / 2.0;
-    m.center_x += (fx - m.pos_x) * speed;
-    m.center_y -= (fy - m.pos_y) * speed;
+    float speed = m_params.scale / 2.0;
+    m_params.center_x += (fx - m_params.pos_x) * speed;
+    m_params.center_y -= (fy - m_params.pos_y) * speed;
 
-    m.pos_x = fx;
-    m.pos_y = fy;
+    m_params.pos_x = fx;
+    m_params.pos_y = fy;
 }
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
@@ -72,17 +88,17 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     auto window_width = (float) width;
     auto window_height = (float) height;
     float aspect_ratio = window_width / window_height;
-    m.pos_x = 2.0 * (static_cast<float>(x) / window_width - 0.5);
-    m.pos_y = 2.0 * (static_cast<float>(y) / window_height - 0.5);
+    m_params.pos_x = 2.0 * (static_cast<float>(x) / window_width - 0.5);
+    m_params.pos_y = 2.0 * (static_cast<float>(y) / window_height - 0.5);
 
     if (yoffset > 0) { // zoom out
-        m.center_x = m.center_x - aspect_ratio * (static_cast<float>(x) / window_width - 0.5) * m.scale * m.zoom;
-        m.center_y = m.center_y + (static_cast<float>(y) / window_height - 0.5) * m.scale * m.zoom;
-        m.scale *= (1 - m.zoom);
+        m_params.center_x = m_params.center_x - aspect_ratio * (static_cast<float>(x) / window_width - 0.5) * m_params.scale * m_params.zoom;
+        m_params.center_y = m_params.center_y + (static_cast<float>(y) / window_height - 0.5) * m_params.scale * m_params.zoom;
+        m_params.scale *= (1 - m_params.zoom);
     } else if (yoffset < 0) { // zoom in
-        m.center_x = m.center_x + aspect_ratio * (static_cast<float>(x) / window_width - 0.5) * m.scale * m.zoom;
-        m.center_y = m.center_y - (static_cast<float>(y) / window_height - 0.5) * m.scale * m.zoom;
-        m.scale *= (1 + m.zoom);
+        m_params.center_x = m_params.center_x + aspect_ratio * (static_cast<float>(x) / window_width - 0.5) * m_params.scale * m_params.zoom;
+        m_params.center_y = m_params.center_y - (static_cast<float>(y) / window_height - 0.5) * m_params.scale * m_params.zoom;
+        m_params.scale *= (1 + m_params.zoom);
     }
 }
 
@@ -125,18 +141,17 @@ void create_slider(nanogui::ref<nanogui::Window> nanogui_window,
 
 std::function<void(float)> iterations_slider_callback(nanogui::TextBox* text_box) {
     return [text_box](float value) {
-        int iterations = (int)(value * (600 - 2)) + 2;
+        float iterations = (int)(value * (s_params.iterations_max - s_params.iterations_min)) + s_params.iterations_min;
         text_box->set_value(std::to_string(iterations));
-        m.iterations = iterations;
+        m_params.iterations = iterations;
     };
 }
 
 std::function<void(float)> center_x_slider_callback(nanogui::TextBox* text_box) {
     return [text_box](float value) {
         float center = 2 * (value - 0.5);
-        std::string str = std::to_string(center);
-        text_box->set_value(str);
-        m.center_x = center;
+        text_box->set_value(std::to_string(center));
+        m_params.center_x = center;
     };
 }
 
@@ -146,7 +161,7 @@ std::function<void(float)> center_y_slider_callback(nanogui::TextBox* text_box) 
         float center = 2 * (value - 0.5);
         std::string str = std::to_string(center);
         text_box->set_value(str);
-        m.center_y = center;
+        m_params.center_y = center;
     };
 }
 
@@ -194,9 +209,18 @@ GLFWwindow* setup_sliders_window() {
     nanogui_window->set_layout(new nanogui::GroupLayout());
     new nanogui::Label(nanogui_window, "Iterations", "sans-bold");
 
-    create_slider(nanogui_window, 0.5, "299", iterations_slider_callback);
-    create_slider(nanogui_window, 0.85, "0.7", center_x_slider_callback);
-    create_slider(nanogui_window, 0.5, "0.0", center_y_slider_callback);
+    create_slider(nanogui_window,
+            s_params.iterations_default_relative,
+            std::to_string(s_params.iterations_default_actual),
+            iterations_slider_callback);
+    create_slider(nanogui_window,
+            s_params.center_x_default_relative,
+            std::to_string(s_params.center_x_default_actual),
+            center_x_slider_callback);
+    create_slider(nanogui_window,
+            s_params.center_y_default_relative,
+            std::to_string(s_params.center_y_default_actual),
+            center_y_slider_callback);
 
     glfwSetCursorPosCallback(window,
                              [](GLFWwindow *, double x, double y) {
@@ -234,7 +258,7 @@ int main(int argc, char **argv) {
     if (!glfwInit())
         return -1;
 
-    window = glfwCreateWindow(m.window_width, m.window_height, "Mandelbrot Set", NULL, NULL);
+    window = glfwCreateWindow(m_params.window_width, m_params.window_height, "Mandelbrot Set", NULL, NULL);
     if (!window) {
         glfwTerminate();
         return -1;
@@ -243,32 +267,33 @@ int main(int argc, char **argv) {
 
     load_texture("../ppl.ppm");
 
-    m.program = load_shader("../mandelbrot.glsl");
+    m_params.program = load_shader("../mandelbrot.glsl");
 
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
     auto window1 = setup_sliders_window();
-    // Game loop
     while (!glfwWindowShouldClose(window1) && !glfwWindowShouldClose(window)) {
-        set_uniform1i(m.program, "iterations", m.iterations);
+        // render sliders
+        set_uniform1i(m_params.program, "iterations", m_params.iterations);
         glfwMakeContextCurrent(window1);
         glfwPollEvents();
 
-        screen->clear(); // glClear
+        screen->clear();
         screen->draw_contents();
         screen->draw_widgets();
 
         glfwSwapBuffers(window1);
 
+        // render the Mandelbrot set
         glfwMakeContextCurrent(window);
-        set_uniform2f(m.program, "center", m.center_x, m.center_y);
-        set_uniform1f(m.program, "scale", m.scale);
+        set_uniform2f(m_params.program, "center", m_params.center_x, m_params.center_y);
+        set_uniform1f(m_params.program, "scale", m_params.scale);
 
         int width, height;
         glfwGetWindowSize(window, &width, &height);
-        set_uniform1f(m.program, "window_height", (float) height);
-        set_uniform1f(m.program, "window_width", (float) width);
+        set_uniform1f(m_params.program, "window_height", (float) height);
+        set_uniform1f(m_params.program, "window_width", (float) width);
 
         glBegin(GL_QUADS);
         glTexCoord2f(0, 0);
@@ -286,8 +311,6 @@ int main(int argc, char **argv) {
         }
 
         glfwSwapBuffers(window);
-
-        glfwPollEvents();
     }
 
     glfwTerminate();
