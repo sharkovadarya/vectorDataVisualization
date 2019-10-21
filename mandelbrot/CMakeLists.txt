@@ -19,15 +19,8 @@ add_definitions(${NANOGUI_EXTRA_DEFS})
 
 add_executable(mandelbrot sdr.cpp image.cpp main.cpp)
 find_package(OpenGL REQUIRED)
-find_package(GLUT REQUIRED)
 find_package(GLEW REQUIRED)
 
-include_directories( ${OPENGL_INCLUDE_DIRS} ${GLUT_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS} ${NANOGUI_EXTRA_INCS} ${nanogui_SOURCE_DIR}/include )
+include_directories( ${OPENGL_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS} ${NANOGUI_EXTRA_INCS} ${nanogui_SOURCE_DIR}/include )
 
-get_cmake_property(_variableNames VARIABLES)
-list (SORT _variableNames)
-foreach (_variableName ${_variableNames})
-    message(STATUS "${_variableName}=${${_variableName}}")
-endforeach()
-
-target_link_libraries(mandelbrot -lfreeimage nanogui ${NANOGUI_EXTRA_LIBS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARIES} )
+target_link_libraries(mandelbrot -lfreeimage nanogui ${NANOGUI_EXTRA_LIBS} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES} )
