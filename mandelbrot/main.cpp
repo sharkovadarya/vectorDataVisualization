@@ -92,12 +92,18 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     m_params.pos_y = 2.0 * (static_cast<float>(y) / window_height - 0.5);
 
     if (yoffset > 0) { // zoom out
-        m_params.center_x = m_params.center_x - aspect_ratio * (static_cast<float>(x) / window_width - 0.5) * m_params.scale * m_params.zoom;
-        m_params.center_y = m_params.center_y + (static_cast<float>(y) / window_height - 0.5) * m_params.scale * m_params.zoom;
+        m_params.center_x = m_params.center_x -
+                aspect_ratio * (static_cast<float>(x) / window_width - 0.5) *
+                m_params.scale * m_params.zoom;
+        m_params.center_y = m_params.center_y +
+                (static_cast<float>(y) / window_height - 0.5) * m_params.scale * m_params.zoom;
         m_params.scale *= (1 - m_params.zoom);
     } else if (yoffset < 0) { // zoom in
-        m_params.center_x = m_params.center_x + aspect_ratio * (static_cast<float>(x) / window_width - 0.5) * m_params.scale * m_params.zoom;
-        m_params.center_y = m_params.center_y - (static_cast<float>(y) / window_height - 0.5) * m_params.scale * m_params.zoom;
+        m_params.center_x = m_params.center_x +
+                aspect_ratio * (static_cast<float>(x) / window_width - 0.5) *
+                m_params.scale * m_params.zoom;
+        m_params.center_y = m_params.center_y -
+                (static_cast<float>(y) / window_height - 0.5) * m_params.scale * m_params.zoom;
         m_params.scale *= (1 + m_params.zoom);
     }
 }
@@ -253,12 +259,12 @@ GLFWwindow* setup_sliders_window() {
 }
 
 int main(int argc, char **argv) {
-    GLFWwindow* window;
-
     if (!glfwInit())
         return -1;
 
-    window = glfwCreateWindow(m_params.window_width, m_params.window_height, "Mandelbrot Set", NULL, NULL);
+    glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
+
+    GLFWwindow* window = glfwCreateWindow(m_params.window_width, m_params.window_height, "Mandelbrot Set", NULL, NULL);
     if (!window) {
         glfwTerminate();
         return -1;
