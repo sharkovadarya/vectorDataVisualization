@@ -6,7 +6,7 @@ void image::load_image(const char *fname) {
     #ifdef FREEIMAGE_LIB
         FreeImage_Initialise();
     #endif
-    FREE_IMAGE_FORMAT fif =FreeImage_GetFileType(fname, 0);
+    FREE_IMAGE_FORMAT fif = FreeImage_GetFileType(fname, 0);
 
     if (fif == FIF_UNKNOWN) {
         fif = FreeImage_GetFIFFromFilename(fname);

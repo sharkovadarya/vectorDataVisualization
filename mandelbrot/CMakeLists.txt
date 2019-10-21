@@ -17,7 +17,7 @@ set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
 add_definitions(${NANOGUI_EXTRA_DEFS})
 
 
-add_executable(mandelbrot sdr.cpp main.cpp image.cpp)
+add_executable(mandelbrot sdr.cpp image.cpp main.cpp)
 find_package(OpenGL REQUIRED)
 find_package(GLUT REQUIRED)
 find_package(GLEW REQUIRED)
