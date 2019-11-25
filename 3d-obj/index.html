@@ -14,10 +14,12 @@
     <script id="phongLightingVertexShader" type="x-shader/x-vertex">
         varying vec3 Normal;
         varying vec3 Position;
+        varying vec2 vUv;
 
         void main() {
             Normal = normalize(normalMatrix * normal);
             Position = vec3(modelViewMatrix * vec4(position, 1.0));
+            vUv = uv;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
     </script>
@@ -25,6 +27,10 @@
     <script id="phongLightingFragmentShader" type="x-shader/x-fragment">
         varying vec3 Normal;
         varying vec3 Position;
+        varying vec2 vUv;
+
+        uniform float time;
+        uniform float dissolve;
 
         uniform vec3 Ka;
         uniform vec3 Kd;
@@ -32,6 +38,8 @@
         uniform vec4 LightPosition;
         uniform vec3 LightIntensity;
         uniform float Shininess;
+
+        uniform sampler2D u_texture;
 
         vec3 phong() {
             vec3 n = normalize(Normal);
@@ -47,7 +55,10 @@
         }
 
         void main() {
-            gl_FragColor = vec4(phong(), 1.0);
+            //vec4 noise_tex = texture2D(u_texture, vUv);
+            vec4 color = vec4(phong(), 1.0);
+            color.w *= dissolve;
+            gl_FragColor = color;
         }
     </script>
 

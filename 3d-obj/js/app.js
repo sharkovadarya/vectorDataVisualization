@@ -5,6 +5,11 @@ let camera;
 let controls;
 let renderer;
 let scene;
+let noiseTexture;
+
+let materialShader;
+
+let delta = 0.001;
 
 function createCamera() {
     camera = new THREE.PerspectiveCamera(45, 1, 1, 1000);
@@ -21,12 +26,30 @@ function createRenderer() {
     document.body.appendChild(renderer.domElement);
 }
 
+function loadTexture() {
+    const loader = new THREE.TextureLoader();
+    loader.load('textures/noise.jpg', function (texture) {
+        noiseTexture = texture;
+        texture.repeat.set(0.1, 0.1);
+        texture.wrapS = texture.wrapT = THREE.MirroredRepeatWrapping;
+        materialShader.uniforms.u_texture.value = texture;
+    }, null, function (err) {
+        console.error("Unable to load texture")
+    });
+}
+
 function loadModel() {
     let loader = new THREE.FBXLoader();
     loader.load(modelUrl, function (object) {
         console.log("model loaded");
 
+
+        object.children[0].material.blending = THREE.NormalBlending;
+        object.children[0].material.transparent = true;
         object.children[0].material.onBeforeCompile = function (shader) {
+            shader.uniforms.u_texture = {value: null};
+            shader.uniforms.time = {value: 0};
+            shader.uniforms.dissolve = {value: 0.15};
             shader.uniforms.Ka = {value: new THREE.Vector3(0.4, 0.5, 0.3)};
             shader.uniforms.Kd = {value: new THREE.Vector3(0.9, 0.7, 0.3)};
             shader.uniforms.Ks = {value: new THREE.Vector3(0.8, 0.8, 0.6)};
@@ -35,6 +58,8 @@ function loadModel() {
             shader.uniforms.Shininess = {value: 2.0};
             shader.vertexShader = document.getElementById('phongLightingVertexShader').textContent;
             shader.fragmentShader = document.getElementById('phongLightingFragmentShader').textContent;
+
+            materialShader = shader;
 
         };
         scene.add(object);
@@ -51,6 +76,7 @@ function resize(renderer) {
     if (needResize) {
         renderer.setSize(width, height, false);
     }
+
     return needResize;
 }
 
@@ -61,14 +87,12 @@ function init() {
     createCamera();
     createRenderer();
     createControls();
-
+    loadTexture();
     loadModel();
 
     renderer.setAnimationLoop(() => {
-
         update();
         render();
-
     });
 }
 
@@ -80,6 +104,16 @@ function render() {
         const canvas = renderer.domElement;
         camera.aspect = canvas.clientWidth / canvas.clientHeight;
         camera.updateProjectionMatrix();
+    }
+
+    if (materialShader) {
+        materialShader.uniforms.time.value = performance.now() / 1000;
+        let new_dissolve = materialShader.uniforms.dissolve.value + delta;
+        if (new_dissolve >= 1.0 || new_dissolve < 0.0) {
+            delta *= -1;
+            new_dissolve = materialShader.uniforms.dissolve.value + delta;
+        }
+        materialShader.uniforms.dissolve.value = new_dissolve;
     }
 
     renderer.render(scene, camera);
