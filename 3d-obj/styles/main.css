@@ -1,0 +1,29 @@
+html, body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    font-family: Monospace, serif;
+}
+canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+#info {
+    color: #fff;
+    position: absolute;
+    top: 10px;
+    width: 100%;
+    text-align: center;
+    z-index: 100;
+    display:block;
+}
+#info a {
+    color: #046;
+    font-weight: bold;
+}
+#player {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+}
