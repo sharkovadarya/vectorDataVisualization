@@ -40,6 +40,7 @@
         uniform float Shininess;
 
         uniform sampler2D u_texture;
+        uniform sampler2D burn_texture;
 
         vec3 phong() {
             vec3 n = normalize(Normal);
@@ -54,10 +55,21 @@
             return LightIntensity * (ambient + diffuse + specular);
         }
 
+        float modI(float a,float b) {
+            float m=a-floor((a+0.5)/b)*b;
+            return floor(m+0.5);
+        }
+
         void main() {
-            //vec4 noise_tex = texture2D(u_texture, vUv);
+            vec4 noise_tex = texture2D(u_texture, vec2(Position.x / 100.0, Position.y / 100.0));
+
+            float d = (2.0 * dissolve + noise_tex.x) - 1.0;
+            float over_one = saturate(d * 1.5);
+            vec4 burn_tex = texture2D(burn_texture, vec2(over_one, 0.5));
+
             vec4 color = vec4(phong(), 1.0);
-            color.w *= dissolve;
+            
+            color *= burn_tex;
             gl_FragColor = color;
         }
     </script>
@@ -65,6 +77,7 @@
     <script src="https://threejs.org/build/three.min.js"></script>
     <script src="https://threejs.org/examples/js/libs/inflate.min.js"></script>
     <script src="https://threejs.org/examples/js/loaders/FBXLoader.js"></script>
+    <script src="https://threejs.org/examples/js/loaders/OBJLoader.js"></script>
     <script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
 
 </head>

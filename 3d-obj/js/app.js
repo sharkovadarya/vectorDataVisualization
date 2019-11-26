@@ -5,7 +5,6 @@ let camera;
 let controls;
 let renderer;
 let scene;
-let noiseTexture;
 
 let materialShader;
 
@@ -26,28 +25,16 @@ function createRenderer() {
     document.body.appendChild(renderer.domElement);
 }
 
-function loadTexture() {
-    const loader = new THREE.TextureLoader();
-    loader.load('textures/noise.jpg', function (texture) {
-        noiseTexture = texture;
-        texture.repeat.set(0.1, 0.1);
-        texture.wrapS = texture.wrapT = THREE.MirroredRepeatWrapping;
-        materialShader.uniforms.u_texture.value = texture;
-    }, null, function (err) {
-        console.error("Unable to load texture")
-    });
-}
-
 function loadModel() {
     let loader = new THREE.FBXLoader();
     loader.load(modelUrl, function (object) {
         console.log("model loaded");
 
-
         object.children[0].material.blending = THREE.NormalBlending;
         object.children[0].material.transparent = true;
         object.children[0].material.onBeforeCompile = function (shader) {
-            shader.uniforms.u_texture = {value: null};
+            shader.uniforms.u_texture = {value: THREE.ImageUtils.loadTexture('textures/noise.jpg')};
+            shader.uniforms.burn_texture = {value: THREE.ImageUtils.loadTexture('textures/burngradient.png')};
             shader.uniforms.time = {value: 0};
             shader.uniforms.dissolve = {value: 0.15};
             shader.uniforms.Ka = {value: new THREE.Vector3(0.4, 0.5, 0.3)};
@@ -84,10 +71,16 @@ function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x8FBCD4);
 
+    const ambientLight = new THREE.HemisphereLight( 0xddeeff, 0x0f0e0d, 5 );
+
+    const mainLight = new THREE.DirectionalLight( 0xffffff, 5 );
+    mainLight.position.set( 10, 10, 10 );
+
+    scene.add( ambientLight, mainLight );
+
     createCamera();
     createRenderer();
     createControls();
-    loadTexture();
     loadModel();
 
     renderer.setAnimationLoop(() => {
