@@ -55,20 +55,22 @@
             return LightIntensity * (ambient + diffuse + specular);
         }
 
-        float modI(float a,float b) {
-            float m=a-floor((a+0.5)/b)*b;
-            return floor(m+0.5);
+        float get_mod(float a, float b) {
+            float m = a - floor((a + 0.5) / b) * b;
+            return floor(m + 0.5);
         }
 
         void main() {
-            vec4 noise_tex = texture2D(u_texture, vec2(Position.x / 100.0, Position.y / 100.0));
+            vec4 noise_tex = texture2D(u_texture,
+                                       vec2(get_mod(Position.x, 100.0) / 100.0,
+                                            get_mod(Position.y, 100.0) / 100.0));
 
             float d = (2.0 * dissolve + noise_tex.x) - 1.0;
-            float over_one = saturate(d * 1.5);
+            float over_one = saturate(d * 3.5);
             vec4 burn_tex = texture2D(burn_texture, vec2(over_one, 0.5));
 
             vec4 color = vec4(phong(), 1.0);
-            
+
             color *= burn_tex;
             gl_FragColor = color;
         }
