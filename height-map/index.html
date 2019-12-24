@@ -29,17 +29,20 @@
 		uniform sampler2D bumpTexture;
 		uniform float bumpScale;
 
-		uniform mat4 textureMatrix;
+		uniform mat4 textureMatrix1;
+		uniform mat4 textureMatrix2;
 
 		varying float vAmount;
 		varying vec2 vUV;
 		varying vec3 pos;
-		varying vec4 projected_texcoord;
+		varying vec4 projected_texcoord1;
+		varying vec4 projected_texcoord2;
+		varying float clipspace_z;
 
 		void main()
 		{
 			vUV = uv;
-			vec4 bumpData = texture2D( bumpTexture, uv );
+			vec4 bumpData = texture2D(bumpTexture, uv);
 
 			vAmount = bumpData.r;
 
@@ -47,9 +50,12 @@
 			vec3 newPosition = position + normal * bumpScale * vAmount;
 
 			pos = newPosition;
-			projected_texcoord = textureMatrix * vec4(newPosition, 1.0);
+			vec4 pos4 = vec4(newPosition, 1.0);
+			projected_texcoord1 = textureMatrix1 * pos4;
+			projected_texcoord2 = textureMatrix2 * pos4;
 
-			gl_Position = projectionMatrix * modelViewMatrix * vec4( newPosition, 1.0 );
+			gl_Position = projectionMatrix * modelViewMatrix * pos4;
+			clipspace_z = gl_Position.z;
 		}
 	</script>
 
@@ -59,17 +65,23 @@
 		uniform sampler2D grassTexture;
 		uniform sampler2D rockyTexture;
 		uniform sampler2D snowyTexture;
-		uniform sampler2D vectorTexture;
+
+		uniform sampler2D vectorsTexture1;
+		uniform sampler2D vectorsTexture2;
 
         uniform vec3 fogColor;
         uniform float fogNear;
         uniform float fogFar;
 
-        uniform float N;
+        uniform float farPlane1;
+        uniform float farPlane2;
 
 		varying vec2 vUV;
 		varying vec3 pos;
-		varying vec4 projected_texcoord;
+
+		varying vec4 projected_texcoord1;
+		varying vec4 projected_texcoord2;
+		varying float clipspace_z;
 
 		varying float vAmount;
 
@@ -80,12 +92,22 @@
 			vec4 rocky = (smoothstep(0.30, 0.50, vAmount) - smoothstep(0.40, 0.70, vAmount)) * texture2D( rockyTexture, vUV * 20.0 );
 			vec4 snowy = (smoothstep(0.50, 0.65, vAmount)) * texture2D( snowyTexture, vUV * 10.0 );
 
+            vec4 vect = vec4(0.0, 0.0, 0.0, 0.0);
+            bool in_range = false;
 
-			vec3 projected_c = projected_texcoord.xyz / projected_texcoord.w;
-			bool in_range = projected_c.x >= 0.0 && projected_c.x <= 1.0 &&
-			               projected_c.y >= 0.0 && projected_c.y <= 1.0;
+            if (clipspace_z < farPlane1) {
+                vec3 projected_c = projected_texcoord1.xyz / projected_texcoord1.w;
+                in_range = projected_c.x >= 0.0 && projected_c.x <= 1.0 &&
+                               projected_c.y >= 0.0 && projected_c.y <= 1.0;
 
-            vec4 vect = texture2D(vectorTexture, projected_c.xy);
+                vect = texture2D(vectorsTexture1, projected_c.xy);
+            } else if (clipspace_z < farPlane2) {
+                vec3 projected_c = projected_texcoord2.xyz / projected_texcoord2.w;
+                in_range = projected_c.x >= 0.0 && projected_c.x <= 1.0 &&
+                               projected_c.y >= 0.0 && projected_c.y <= 1.0;
+
+                vect = texture2D(vectorsTexture2, projected_c.xy);
+            }
 
 
 			if (in_range && vect != vec4(0.0, 0.0, 0.0, 0.0)) {
