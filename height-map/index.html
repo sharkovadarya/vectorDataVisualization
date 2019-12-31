@@ -8,7 +8,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta charset="UTF-8" />
 
-    <link rel="icon" href="https://discoverthreejs.com/favicon.ico" type="image/x-icon">
 
     <link href="styles/main.css" rel="stylesheet" type="text/css">
 
@@ -109,8 +108,12 @@
                 vect = texture2D(vectorsTexture2, projected_c.xy);
             }
 
-
-			if (in_range && vect != vec4(0.0, 0.0, 0.0, 0.0)) {
+            if (in_range && vect != vec4(0.0, 0.0, 0.0, 0.0)) {
+			    /*if (projected_texcoord1.x < 0.005 || projected_texcoord1.y < 0.005 || projected_texcoord1.x > 0.995 || projected_texcoord1.y > 0.995) {
+			        gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+			    } else {
+			        gl_FragColor = vect;
+			    }*/
 			    gl_FragColor = vect;
 			} else {
 			    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0) + water + sandy + grass + rocky + snowy;
