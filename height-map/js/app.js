@@ -186,14 +186,14 @@ function calculateCameraFrustumCorners(camera) {
     const yNear = Math.tan(THREE.Math.degToRad(camera.fov) / 2) * camera.near;
     const yFar = Math.tan(THREE.Math.degToRad(camera.fov) / 2) * camera.far;
 
-    let arr = [new THREE.Vector3(xNear,      yNear, camera.near),
-               new THREE.Vector3(xNear * -1, yNear, camera.near),
-               new THREE.Vector3(xNear,      yNear * -1, camera.near),
-               new THREE.Vector3(xNear * -1, yNear * -1, camera.near),
-               new THREE.Vector3(xFar,       yFar, camera.far),
-               new THREE.Vector3(xFar *  -1, yFar, camera.far),
-               new THREE.Vector3(xFar,       yFar * -1, camera.far),
-               new THREE.Vector3(xFar *  -1, yFar * -1, camera.far)];
+    let arr = [new THREE.Vector3(xNear, yNear, camera.near),
+        new THREE.Vector3(xNear * -1, yNear, camera.near),
+        new THREE.Vector3(xNear, yNear * -1, camera.near),
+        new THREE.Vector3(xNear * -1, yNear * -1, camera.near),
+        new THREE.Vector3(xFar, yFar, camera.far),
+        new THREE.Vector3(xFar * -1, yFar, camera.far),
+        new THREE.Vector3(xFar, yFar * -1, camera.far),
+        new THREE.Vector3(xFar * -1, yFar * -1, camera.far)];
 
 
     return arr.map(function (val) {
@@ -202,6 +202,7 @@ function calculateCameraFrustumCorners(camera) {
 }
 
 function getProjectionMatrixForFrustum(camera) {
+    //return new THREE.OrthographicCamera(container.clientWidth / -2, container.clientWidth / 2, container.clientHeight / 2, container.clientHeight / -2, 1, 10000);
     const frustumCorners = calculateCameraFrustumCorners(camera);
 
     let minX = Number.MAX_VALUE;
@@ -227,16 +228,13 @@ function getProjectionMatrixForFrustum(camera) {
 
 
 function createTextureMatrices() {
-    /*textureMatrix1 = textureMatrix1.makeTranslation(0.5, 0.5, 0.5);
-    textureMatrix1 = textureMatrix1.makeScale(0.5, 0.5, 0.5);*/
+    textureMatrix1 = textureMatrix1.makeTranslation(0.5, 0.5, 0.5);
+    //textureMatrix1 = textureMatrix1.makeScale(0.5, 0.5, 0.5);
     textureMatrix1 = textureMatrix1.multiply(orthographicCamera1.projectionMatrix);
-    //textureMatrix1 = textureMatrix1.multiply(camera.matrixWorldInverse);
 
-    /*textureMatrix2 = textureMatrix2.makeTranslation(0.5, 0.5, 0.5);
-    textureMatrix2 = textureMatrix2.makeScale(0.5, 0.5, 0.5);*/
+    textureMatrix2 = textureMatrix2.makeTranslation(0.5, 0.5, 0.5);
+    //textureMatrix2 = textureMatrix2.makeScale(0.5, 0.5, 0.5);
     textureMatrix2 = textureMatrix2.multiply(orthographicCamera2.projectionMatrix);
-    //textureMatrix2 = textureMatrix2.multiply(camera.matrixWorldInverse);
-
 }
 
 function init() {
