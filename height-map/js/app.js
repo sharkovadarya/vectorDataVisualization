@@ -149,7 +149,7 @@ function createControls() {
 function initBufferTexture() {
     bufferScene = new THREE.Scene();
     // the following line is for debug purposes
-    bufferScene.background = new THREE.Color('green');
+    //bufferScene.background = new THREE.Color('green');
 
     bufferTexture1 = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
         minFilter: THREE.LinearFilter,
@@ -228,12 +228,14 @@ function getProjectionMatrixForFrustum(camera) {
 
 
 function createTextureMatrices() {
+    const scaleMatrix = new THREE.Matrix4().makeScale(0.5, 0.5, 0.5);
+
     textureMatrix1 = textureMatrix1.makeTranslation(0.5, 0.5, 0.5);
-    //textureMatrix1 = textureMatrix1.makeScale(0.5, 0.5, 0.5);
+    //textureMatrix1 = textureMatrix1.multiply(scaleMatrix);
     textureMatrix1 = textureMatrix1.multiply(orthographicCamera1.projectionMatrix);
 
     textureMatrix2 = textureMatrix2.makeTranslation(0.5, 0.5, 0.5);
-    //textureMatrix2 = textureMatrix2.makeScale(0.5, 0.5, 0.5);
+    //textureMatrix2 = textureMatrix2.multiply(scaleMatrix);
     textureMatrix2 = textureMatrix2.multiply(orthographicCamera2.projectionMatrix);
 }
 
