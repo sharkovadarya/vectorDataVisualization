@@ -4,11 +4,10 @@ let renderer;
 let scene;
 let mesh;
 let controls;
+let shaderMaterial; // for update
 let bufferScene;
 let bufferTexture1;
 let bufferTexture2;
-let textureMatrix1;
-let textureMatrix2;
 
 let debugScene;
 let orthographicCamera1;
@@ -69,9 +68,6 @@ function createMeshes() {
     // magnitude of normal displacement
     const bumpScale = 400.0;
 
-    textureMatrix1 = new THREE.Matrix4();
-    textureMatrix2 = new THREE.Matrix4();
-
     let farPlane1 = new THREE.Vector4(0, 0, camera.far / split, 1);
     farPlane1.applyMatrix4(camera.matrixWorldInverse);
     let farPlane2 = new THREE.Vector4(0, 0, camera.far, 1);
@@ -91,14 +87,14 @@ function createMeshes() {
         fogColor: {type: "c", value: scene.fog.color},
         fogNear: {type: "f", value: scene.fog.near},
         fogFar: {type: "f", value: scene.fog.far},
-        textureMatrix1: {type: "m4", value: textureMatrix1},
-        textureMatrix2: {type: "m4", value: textureMatrix2},
+        textureMatrix1: {type: "m4", value: new THREE.Matrix4()},
+        textureMatrix2: {type: "m4", value: new THREE.Matrix4()},
         farPlane1: {type: "f", value: farPlane1.z},
         farPlane2: {type: "f", value: farPlane2.z}
     };
 
 
-    const customMaterial = new THREE.ShaderMaterial(
+    shaderMaterial = new THREE.ShaderMaterial(
         {
             uniforms: customUniforms,
             vertexShader: document.getElementById('vertexShader').textContent,
@@ -107,8 +103,7 @@ function createMeshes() {
             //fog: true
         });
 
-
-    const plane = new THREE.Mesh(geometry, customMaterial);
+    const plane = new THREE.Mesh(geometry, shaderMaterial);
     plane.position.set(0, -150, 0);
     plane.rotation.x = -Math.PI / 2;
     scene.add(plane);
@@ -228,15 +223,8 @@ function getProjectionMatrixForFrustum(camera) {
 
 
 function createTextureMatrices() {
-    const scaleMatrix = new THREE.Matrix4().makeScale(0.5, 0.5, 0.5);
-
-    textureMatrix1 = textureMatrix1.makeTranslation(0.5, 0.5, 0.5);
-    //textureMatrix1 = textureMatrix1.multiply(scaleMatrix);
-    textureMatrix1 = textureMatrix1.multiply(orthographicCamera1.projectionMatrix);
-
-    textureMatrix2 = textureMatrix2.makeTranslation(0.5, 0.5, 0.5);
-    //textureMatrix2 = textureMatrix2.multiply(scaleMatrix);
-    textureMatrix2 = textureMatrix2.multiply(orthographicCamera2.projectionMatrix);
+    shaderMaterial.uniforms.textureMatrix1.value = orthographicCamera1.projectionMatrix;
+    shaderMaterial.uniforms.textureMatrix2.value = orthographicCamera2.projectionMatrix;
 }
 
 function init() {
@@ -279,7 +267,6 @@ function createOrthographicCameras() {
 }
 
 function render() {
-
     createOrthographicCameras();
     createTextureMatrices();
 

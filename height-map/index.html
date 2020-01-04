@@ -45,7 +45,7 @@
 
 			vAmount = bumpData.r;
 
-			// move the position along the normal
+            // position comes from geometry.vertices[i].position and is in local space
 			vec3 newPosition = position + normal * bumpScale * vAmount;
 
 			pos = newPosition;
@@ -53,8 +53,11 @@
 			projected_texcoord1 = textureMatrix1 * pos4;
 			projected_texcoord2 = textureMatrix2 * pos4;
 
-			gl_Position = projectionMatrix * modelViewMatrix * pos4;
-			clipspace_z = gl_Position.z;
+
+			//gl_Position = projectionMatrix * modelViewMatrix * pos4;
+			// modelMatrix corresponds to plane.matrixWorld
+			// starts out as an identity matrix, then gets its values set when the scene is rendered
+			gl_Position = projectionMatrix * viewMatrix * modelMatrix * pos4;
 		}
 	</script>
 
@@ -80,38 +83,39 @@
 
 		varying vec4 projected_texcoord1;
 		varying vec4 projected_texcoord2;
-		varying float clipspace_z;
 
 		varying float vAmount;
 
-		vec4 get_projected_texture_color(vec4 coord, sampler2D texture) {
+		bool get_projected_texture_color(vec4 coord, sampler2D texture, out vec4 color) {
 		    vec3 projected_c = coord.xyz / coord.w;
-            bool in_range = projected_c.x >= 0.0 && projected_c.x <= 1.0 &&
-                               projected_c.y >= 0.0 && projected_c.y <= 1.0;
+            bool in_range = projected_c.x >= -1.0 && projected_c.x <= 1.0 &&
+                               projected_c.y >= -1.0 && projected_c.y <= 1.0;
             if (in_range) {
-                if (projected_c.x <= 0.05 || projected_c.y <= 0.05 || projected_c.x >= 0.95 || projected_c.y >= 0.95) {
-                    return vec4(1.0, 0.0, 0.0, 1.0);
+                if (projected_c.x <= -0.95 || projected_c.y <= -0.95 ||
+                    projected_c.x >= 0.95 || projected_c.y >= 0.95) {
+                    color = vec4(1.0, 0.0, 0.0, 1.0);
+                    return true;
 		        } else {
-		            return texture2D(texture, projected_c.xy);
+		            color = texture2D(texture, vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+		            return true;
 		        }
             }
 
-            return vec4(-1.0, 0.0, 0.0, 0.0);
-            //vect = texture2D(texture, projected_c.xy);
+            color =  vec4(-1.0, 0.0, 0.0, 0.0);
+            return false;
 		}
 
 		void main() {
-			vec4 water = (smoothstep(0.01, 0.25, vAmount) - smoothstep(0.24, 0.26, vAmount)) * texture2D( oceanTexture, vUV * 10.0 );
-			vec4 sandy = (smoothstep(0.24, 0.27, vAmount) - smoothstep(0.28, 0.31, vAmount)) * texture2D( sandyTexture, vUV * 10.0 );
-			vec4 grass = (smoothstep(0.28, 0.32, vAmount) - smoothstep(0.35, 0.40, vAmount)) * texture2D( grassTexture, vUV * 20.0 );
-			vec4 rocky = (smoothstep(0.30, 0.50, vAmount) - smoothstep(0.40, 0.70, vAmount)) * texture2D( rockyTexture, vUV * 20.0 );
+			vec4 water = (smoothstep(0.01, 0.25, vAmount) - smoothstep(0.24, 0.26, vAmount)) * texture2D(oceanTexture, vUV * 10.0);
+			vec4 sandy = (smoothstep(0.24, 0.27, vAmount) - smoothstep(0.28, 0.31, vAmount)) * texture2D(sandyTexture, vUV * 10.0);
+			vec4 grass = (smoothstep(0.28, 0.32, vAmount) - smoothstep(0.35, 0.40, vAmount)) * texture2D(grassTexture, vUV * 20.0);
+			vec4 rocky = (smoothstep(0.30, 0.50, vAmount) - smoothstep(0.40, 0.70, vAmount)) * texture2D(rockyTexture, vUV * 20.0);
 			vec4 snowy = (smoothstep(0.50, 0.65, vAmount)) * texture2D( snowyTexture, vUV * 10.0 );
 
             vec4 color = vec4(-1.0, 0.0, 0.0, 0.0);
-            if (clipspace_z < farPlane1) {
-                color = get_projected_texture_color(projected_texcoord1, vectorsTexture1);
-            } else if (clipspace_z < farPlane2) {
-                color = get_projected_texture_color(projected_texcoord2, vectorsTexture2);
+
+            if (!get_projected_texture_color(projected_texcoord1, vectorsTexture1, color)) {
+                get_projected_texture_color(projected_texcoord2, vectorsTexture2, color);
             }
 
             if (color.x == -1.0 || color.w == 0.0) {
