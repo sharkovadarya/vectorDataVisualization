@@ -11,32 +11,37 @@
 
     <link href="styles/main.css" rel="stylesheet" type="text/css">
 
-    <script src="https://threejs.org/build/three.min.js"></script>
+    <!--<script src="https://threejs.org/build/three.min.js"></script>
 
-    <script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>-->
 
 
-    <!--<script src="js/vendor/three/three.js"></script>
+    <script src="js/vendor/three/three.js"></script>
     <script src="js/vendor/three/OrbitControls.js"></script>
-    <script src="js/vendor/three/SVGLoader.js"></script>-->
+    <!--<script src="js/vendor/three/SVGLoader.js"></script>-->
 
 </head>
 
 <body>
 
 <script id="vertexShader" type="x-shader/x-vertex">
+        const int MAX_SPLITS = 4;
+
 		uniform sampler2D bumpTexture;
 		uniform float bumpScale;
 
 		uniform mat4 textureMatrix1;
 		uniform mat4 textureMatrix2;
+		uniform mat4 textureMatrices[MAX_SPLITS];
+		uniform int splitCount;
 
 		varying float vAmount;
 		varying vec2 vUV;
 		varying vec3 pos;
+
 		varying vec4 projected_texcoord1;
 		varying vec4 projected_texcoord2;
-		varying float clipspace_z;
+		varying vec4 projected_texcoords[MAX_SPLITS];
 
 		void main()
 		{
@@ -50,8 +55,12 @@
 
 			pos = newPosition;
 			vec4 pos4 = vec4(newPosition, 1.0);
-			projected_texcoord1 = textureMatrix1 * pos4;
-			projected_texcoord2 = textureMatrix2 * pos4;
+			for (int i = 0; i < MAX_SPLITS; ++i) {
+			    if (i >= splitCount) {
+			        break;
+			    }
+			    projected_texcoords[i] = textureMatrices[i] * pos4;
+			}
 
 
 			//gl_Position = projectionMatrix * modelViewMatrix * pos4;
@@ -62,27 +71,27 @@
 	</script>
 
 <script id="fragmentShader" type="x-shader/x-vertex">
+        const int MAX_SPLITS = 4;
+
 		uniform sampler2D oceanTexture;
 		uniform sampler2D sandyTexture;
 		uniform sampler2D grassTexture;
 		uniform sampler2D rockyTexture;
 		uniform sampler2D snowyTexture;
 
-		uniform sampler2D vectorsTexture1;
-		uniform sampler2D vectorsTexture2;
+		uniform sampler2D vectorsTextures[MAX_SPLITS];
+		uniform int splitCount;
 
         uniform vec3 fogColor;
         uniform float fogNear;
         uniform float fogFar;
-
-        uniform float farPlane1;
-        uniform float farPlane2;
 
 		varying vec2 vUV;
 		varying vec3 pos;
 
 		varying vec4 projected_texcoord1;
 		varying vec4 projected_texcoord2;
+		varying vec4 projected_texcoords[MAX_SPLITS];
 
 		varying float vAmount;
 
@@ -91,6 +100,8 @@
             bool in_range = projected_c.x >= -1.0 && projected_c.x <= 1.0 &&
                                projected_c.y >= -1.0 && projected_c.y <= 1.0;
             if (in_range) {
+                    /*color = texture2D(texture, vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+		            return true;*/
                 if (projected_c.x <= -0.95 || projected_c.y <= -0.95 ||
                     projected_c.x >= 0.95 || projected_c.y >= 0.95) {
                     color = vec4(1.0, 0.0, 0.0, 1.0);
@@ -114,8 +125,13 @@
 
             vec4 color = vec4(-1.0, 0.0, 0.0, 0.0);
 
-            if (!get_projected_texture_color(projected_texcoord1, vectorsTexture1, color)) {
-                get_projected_texture_color(projected_texcoord2, vectorsTexture2, color);
+            for (int i = 0; i < MAX_SPLITS; ++i) {
+                if (i >= splitCount) {
+                    break;
+                }
+                if (get_projected_texture_color(projected_texcoords[i], vectorsTextures[i], color)) {
+                    break;
+                }
             }
 
             if (color.x == -1.0 || color.w == 0.0) {

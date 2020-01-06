@@ -5,15 +5,29 @@ let scene;
 let mesh;
 let controls;
 let shaderMaterial; // for update
+
+let splitCount = 4;
+let splitLambda = 0.5;
+let maxSplitDistances = new Array(splitCount + 1).fill(0);
+
 let bufferScene;
-let bufferTexture1;
-let bufferTexture2;
+let bufferTextures = [];
 
 let debugScene;
-let orthographicCamera1;
-let orthographicCamera2;
+let orthographicCameras = [];
 
-const split = 10;
+
+function calculateMaxSplitDistances() {
+    const near = camera.near;
+    const far = camera.far;
+    maxSplitDistances[0] = near;
+    for (let i = 1; i < splitCount + 1; i++) {
+        let f = i / (splitCount + 1);
+        let l = near * Math.pow(far / near, f);
+        let u = near + (far - near) * f;
+        maxSplitDistances[i] = l * splitLambda + u * (1 - splitLambda);
+    }
+}
 
 function createCamera(positionX, positionY, positionZ) {
     const fov = 45;
@@ -24,24 +38,20 @@ function createCamera(positionX, positionY, positionZ) {
     let camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
     camera.position.set(positionX, positionY, positionZ);
 
-    return camera
+    return camera;
 }
 
 function createDebugMeshes() {
     const debugSize = 150;
-    const textureGeometry1 = new THREE.PlaneBufferGeometry(debugSize * camera.aspect, debugSize, 128, 128);
-    const textureMaterial1 = new THREE.MeshBasicMaterial({map: bufferTexture1.texture, depthTest: false});
-    const textureMesh1 = new THREE.Mesh(textureGeometry1, textureMaterial1);
-
-    const textureGeometry2 = new THREE.PlaneBufferGeometry(debugSize * camera.aspect, debugSize, 128, 128);
-    const textureMaterial2 = new THREE.MeshBasicMaterial({map: bufferTexture2.texture, depthTest: false});
-    const textureMesh2 = new THREE.Mesh(textureGeometry2, textureMaterial2);
 
     debugScene.add(camera);
-    camera.add(textureMesh1);
-    textureMesh1.position.set(-550, -300, -1000);
-    camera.add(textureMesh2);
-    textureMesh2.position.set(-550 + textureMesh1.geometry.parameters.width + 50, -300, -1000);
+    for (let i = 0; i < bufferTextures.length; ++i) {
+        const textureGeometry = new THREE.PlaneBufferGeometry(debugSize * camera.aspect, debugSize, 128, 128);
+        const textureMaterial = new THREE.MeshBasicMaterial({map: bufferTextures[i].texture, depthTest: false});
+        const textureMesh = new THREE.Mesh(textureGeometry, textureMaterial);
+        camera.add(textureMesh);
+        textureMesh.position.set(-550 + (textureMesh.geometry.parameters.width + 50) * i, -300, -1000);
+    }
 }
 
 function createMeshes() {
@@ -63,16 +73,8 @@ function createMeshes() {
     rockyTexture.wrapS = rockyTexture.wrapT = THREE.RepeatWrapping;
     const snowyTexture = textureLoader.load('textures/snow-512.jpg');
     snowyTexture.wrapS = snowyTexture.wrapT = THREE.RepeatWrapping;
-    const vectorsTexture1 = bufferTexture1.texture;
-    const vectorsTexture2 = bufferTexture2.texture;
     // magnitude of normal displacement
     const bumpScale = 400.0;
-
-    let farPlane1 = new THREE.Vector4(0, 0, camera.far / split, 1);
-    farPlane1.applyMatrix4(camera.matrixWorldInverse);
-    let farPlane2 = new THREE.Vector4(0, 0, camera.far, 1);
-    farPlane2.applyMatrix4(camera.matrixWorldInverse);
-
 
     let customUniforms = {
         bumpTexture: {type: "t", value: bumpTexture},
@@ -82,15 +84,14 @@ function createMeshes() {
         grassTexture: {type: "t", value: grassTexture},
         rockyTexture: {type: "t", value: rockyTexture},
         snowyTexture: {type: "t", value: snowyTexture},
-        vectorsTexture1: {type: "t", value: vectorsTexture1},
-        vectorsTexture2: {type: "t", value: vectorsTexture2},
         fogColor: {type: "c", value: scene.fog.color},
         fogNear: {type: "f", value: scene.fog.near},
         fogFar: {type: "f", value: scene.fog.far},
-        textureMatrix1: {type: "m4", value: new THREE.Matrix4()},
-        textureMatrix2: {type: "m4", value: new THREE.Matrix4()},
-        farPlane1: {type: "f", value: farPlane1.z},
-        farPlane2: {type: "f", value: farPlane2.z}
+        splitCount: {type: "i", value: splitCount},
+        vectorsTextures: {type: "tv", value: bufferTextures.map(function (bt) {
+                return bt.texture;
+            })},
+        textureMatrices: {type: "m4v", value: new Array(4).fill(new THREE.Matrix4())}
     };
 
 
@@ -146,14 +147,12 @@ function initBufferTexture() {
     // the following line is for debug purposes
     //bufferScene.background = new THREE.Color('green');
 
-    bufferTexture1 = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
-        minFilter: THREE.LinearFilter,
-        magFilter: THREE.NearestFilter
-    });
-    bufferTexture2 = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
-        minFilter: THREE.LinearFilter,
-        magFilter: THREE.NearestFilter
-    });
+    for (let i = 0; i < splitCount; ++i) {
+        bufferTextures[i] = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+            minFilter: THREE.LinearFilter,
+            magFilter: THREE.NearestFilter
+        });
+    }
 
     for (let i = 0; i < 5; ++i) {
         for (let j = 0; j < 3; ++j) {
@@ -194,10 +193,22 @@ function calculateCameraFrustumCorners(camera) {
     return arr.map(function (val) {
         return cameraToWorld(val, camera);
     });
+    // TODO alternative, shorter way to calculate frustum corners; use this one
+    /*let ndc_corners = [
+        [-1,-1,-1], [1,-1,-1], [-1,1,-1], [1,1,-1],
+        [-1,-1, 1], [1,-1, 1], [-1,1, 1], [1,1, 1]];
+
+    let world_corners = [];
+    for (let i=0; i < ndc_corners.length; ++i) {
+        let ndc_v = new THREE.Vector3(...ndc_corners[i]);
+        world_corners.push(ndc_v.unproject(camera));
+    }
+    return world_corners.map(function (p) {
+        return new THREE.Vector3(p.x * -1, p.y * -1, p.z * -1);
+    });*/
 }
 
 function getProjectionMatrixForFrustum(camera) {
-    //return new THREE.OrthographicCamera(container.clientWidth / -2, container.clientWidth / 2, container.clientHeight / 2, container.clientHeight / -2, 1, 10000);
     const frustumCorners = calculateCameraFrustumCorners(camera);
 
     let minX = Number.MAX_VALUE;
@@ -208,8 +219,6 @@ function getProjectionMatrixForFrustum(camera) {
     let maxZ = Number.MIN_VALUE;
     for (let i = 0; i < frustumCorners.length; i++) {
         let corner = frustumCorners[i];
-        // a transformation is not needed here? we go from view space to world space to light space
-        // but light space and view space are the same thing?
         minX = Math.min(corner.x, minX);
         maxX = Math.max(corner.x, maxX);
         minY = Math.min(corner.y, minY);
@@ -223,8 +232,11 @@ function getProjectionMatrixForFrustum(camera) {
 
 
 function createTextureMatrices() {
-    shaderMaterial.uniforms.textureMatrix1.value = orthographicCamera1.projectionMatrix;
-    shaderMaterial.uniforms.textureMatrix2.value = orthographicCamera2.projectionMatrix;
+    let matrices = [];
+    for (let i = 0; i < orthographicCameras.length; ++i) {
+        matrices[i] = orthographicCameras[i].projectionMatrix;
+    }
+    shaderMaterial.uniforms['textureMatrices'].value = matrices;
 }
 
 function init() {
@@ -237,8 +249,10 @@ function init() {
     debugScene = new THREE.Scene();
 
     camera = createCamera(1000, 1000, 200);
+    createOrthographicCameras();
     initBufferTexture();
     createMeshes();
+    createTextureMatrices();
     createDebugMeshes();
     createLights();
     createControls();
@@ -255,29 +269,28 @@ function update() {
 }
 
 function createOrthographicCameras() {
-    const nearCamera = new THREE.PerspectiveCamera(camera.fov, camera.aspect, camera.near, camera.far / split);
-    nearCamera.position.set(camera.position.x, camera.position.y, camera.position.z);
-    const farCamera = new THREE.PerspectiveCamera(camera.fov, camera.aspect, camera.far / split, camera.far);
-    farCamera.position.set(camera.position.x, camera.position.y, camera.position.z);
+    calculateMaxSplitDistances();
 
-    orthographicCamera1 = getProjectionMatrixForFrustum(nearCamera);
-    orthographicCamera1.position.z = nearCamera.near + 1;
-    orthographicCamera2 = getProjectionMatrixForFrustum(farCamera);
-    orthographicCamera2.position.z = farCamera.near + 1;
+    for (let i = 0; i < splitCount; ++i) {
+        const currentCamera = new THREE.PerspectiveCamera(camera.fov, camera.aspect, maxSplitDistances[i], maxSplitDistances[i + 1]);
+        orthographicCameras[i] = getProjectionMatrixForFrustum(currentCamera);
+        orthographicCameras[i].position.z = currentCamera.near + 1;
+    }
 }
 
 function render() {
     createOrthographicCameras();
     createTextureMatrices();
 
-    renderer.setRenderTarget(bufferTexture1);
-    renderer.render(bufferScene, orthographicCamera1);
-    renderer.setRenderTarget(bufferTexture2);
-    renderer.render(bufferScene, orthographicCamera2);
+    for (let i = 0; i < bufferTextures.length; ++i) {
+        renderer.setRenderTarget(bufferTextures[i]);
+        renderer.render(bufferScene, orthographicCameras[i]);
+    }
     renderer.setRenderTarget(null);
     renderer.render(scene, camera);
     renderer.autoClear = false;
     renderer.render(debugScene, camera);
+    renderer.autoClear = true;
 }
 
 function onWindowResize() {
