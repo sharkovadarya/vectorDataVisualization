@@ -274,7 +274,9 @@ class ViewArea extends Component {
         let world_corners = [];
         for (let i = 0; i < ndc_corners.length; ++i) {
             let ndc_v = new THREE.Vector3(...ndc_corners[i]);
-            world_corners.push(ndc_v.unproject(camera));
+            let v_cam = ndc_v.unproject(camera);
+            // let v_cam_4 = new THREE.Vector4(v_cam.x, v_cam.y, v_cam.z, 1);
+            world_corners.push(v_cam);
         }
         return world_corners.map(function (p) {
             return new THREE.Vector3(p.x * -1, p.y * -1, p.z * -1);
@@ -311,7 +313,10 @@ class ViewArea extends Component {
         this.calculateMaxSplitDistances(this.camera);
 
         for (let i = 0; i < this.splitCount; ++i) {
-            const currentCamera = new THREE.PerspectiveCamera(this.camera.fov, this.camera.aspect, this.maxSplitDistances[i], this.maxSplitDistances[i + 1]);
+            let currentCamera = new THREE.PerspectiveCamera(this.camera.fov, this.camera.aspect, this.maxSplitDistances[i], this.maxSplitDistances[i + 1]);
+            currentCamera.position.set(this.camera.position.x, this.camera.position.y, this.camera.position.z);
+            currentCamera.rotation.set(this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z);
+            currentCamera.updateMatrixWorld( true );
             this.orthographicCameras[i] = this.getProjectionMatrixForFrustum(currentCamera);
             this.orthographicCameras[i].position.z = currentCamera.near + 1;
         }
