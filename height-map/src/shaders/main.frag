@@ -1,4 +1,4 @@
-const int MAX_SPLITS = 4;
+const int MAX_SPLITS = 16;
 
 uniform sampler2D oceanTexture;
 uniform sampler2D sandyTexture;
@@ -9,6 +9,8 @@ uniform sampler2D snowyTexture;
 uniform sampler2D vectorsTextures[MAX_SPLITS];
 uniform int splitCount;
 
+uniform int displayBorders;
+
 uniform vec3 fogColor;
 uniform float fogNear;
 uniform float fogFar;
@@ -16,8 +18,6 @@ uniform float fogFar;
 varying vec2 vUV;
 varying vec3 pos;
 
-varying vec4 projected_texcoord1;
-varying vec4 projected_texcoord2;
 varying vec4 projected_texcoords[MAX_SPLITS];
 
 varying float vAmount;
@@ -27,16 +27,18 @@ bool get_projected_texture_color(vec4 coord, sampler2D texture, out vec4 color) 
   bool in_range = projected_c.x >= -1.0 && projected_c.x <= 1.0 &&
   projected_c.y >= -1.0 && projected_c.y <= 1.0;
   if (in_range) {
-    /*color = texture2D(texture, vec2(0.5, 0.5) + 0.5 * projected_c.xy);
-    return true;*/
-    if (projected_c.x <= -0.95 || projected_c.y <= -0.95 ||
-    projected_c.x >= 0.95 || projected_c.y >= 0.95) {
-      color = vec4(1.0, 0.0, 0.0, 1.0);
-      return true;
+    if (displayBorders == 1) {
+      if (projected_c.x <= -0.95 || projected_c.y <= -0.95 ||
+      projected_c.x >= 0.95 || projected_c.y >= 0.95) {
+        color = vec4(1.0, 0.0, 0.0, 1.0);
+      } else {
+        color = texture2D(texture, vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      }
     } else {
       color = texture2D(texture, vec2(0.5, 0.5) + 0.5 * projected_c.xy);
-      return true;
     }
+    return true;
+
   }
 
   color =  vec4(-1.0, 0.0, 0.0, 0.0);

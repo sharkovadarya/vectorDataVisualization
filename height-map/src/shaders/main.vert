@@ -1,24 +1,10 @@
-///////////////////////////////////////////////////////////////////////////
-// Builtin from
-///////////////////////////////////////////////////////////////////////////
+//#pragma loader: import {process} from './../shaders/lib.glsl';
 
-// #version 330
-
-// uniform mat4 modelViewMatrix;
-// uniform mat4 projectionMatrix;
-
-// attribute vec3 position;
-
-#pragma loader: import {process} from './../shaders/lib.glsl';
-
-
-const int MAX_SPLITS = 4;
+const int MAX_SPLITS = 16;
 
 uniform sampler2D bumpTexture;
 uniform float bumpScale;
 
-uniform mat4 textureMatrix1;
-uniform mat4 textureMatrix2;
 uniform mat4 textureMatrices[MAX_SPLITS];
 uniform int splitCount;
 
@@ -26,8 +12,6 @@ varying float vAmount;
 varying vec2 vUV;
 varying vec3 pos;
 
-varying vec4 projected_texcoord1;
-varying vec4 projected_texcoord2;
 varying vec4 projected_texcoords[MAX_SPLITS];
 
 void main()

@@ -1,5 +1,6 @@
 import React, {Component} from "react";
 import * as THREE from 'three-full';
+import * as dat from 'dat.gui'
 import vxShader from '../../shaders/main.vert';
 import fragShader from '../../shaders/main.frag';
 
@@ -15,22 +16,27 @@ import {connect} from 'react-redux'
 // import {log} from 'log';
 
 class ViewArea extends Component {
-
     constructor(props) {
         super(props);
         this.state = {};
 
+        // TODO where to store constants?
+        this.maxSplitCount = 16;
+
         this.canvasRef = React.createRef();
         this.divRef = React.createRef();
 
-        this.splitCount = 4;
+        this.splitCount = 8;
         this.splitLambda = 0.5;
         this.maxSplitDistances = [];
-        this.currentSplitType = "log";
-        this.mixParameter = 0.5;
+        this.currentSplitType = "logarithmic";
+        this.mixParameter = 0.0;
 
         this.orthographicCameras = [];
-        this.bufferTextures = [];
+        this.bufferTextures = new Array(this.maxSplitCount).fill(null);
+
+        this.displayBorders = false;
+        this.displayTextures = true;
 
 
         this.scene = new THREE.Scene();
@@ -50,6 +56,48 @@ class ViewArea extends Component {
 
         // trace camera parameters
         this.cameraControlsTriggered = false;
+
+        const CSMParameters = function () {
+            this.splitCount = 8;
+            this.splitType = "logarithmic";
+            this.mixParameter = 0.0;
+            this.displayBorders = true;
+            this.displayTextures = true;
+        };
+
+        let refs = this;
+        window.onload = function() {
+            let parameters = new CSMParameters();
+            let gui = new dat.GUI();
+            gui.add(parameters, 'splitCount').min(1).max(refs.maxSplitCount).step(1);
+            gui.add(parameters, 'splitType', ["logarithmic", "linear", "mixed"]);
+            gui.add(parameters, 'mixParameter').min(0.0).max(1.0).step(0.001);
+            gui.add(parameters, 'displayBorders');
+            gui.add(parameters, 'displayTextures');
+
+            let update = function () {
+                requestAnimationFrame(update);
+                switch (parameters.splitType) {
+                    case "logarithmic":
+                        parameters.mixParameter = 0.0;
+                        break;
+                    case "linear":
+                        parameters.mixParameter = 1.0;
+                        break;
+                }
+
+                for (let i in gui.__controllers) {
+                    gui.__controllers[i].updateDisplay();
+                }
+
+                refs.splitCount = parameters.splitCount;
+                refs.currentSplitType = parameters.splitType;
+                refs.mixParameter = parameters.mixParameter;
+                refs.displayBorders = parameters.displayBorders;
+                refs.displayTextures = parameters.displayTextures;
+            };
+            update();
+        };
     }
 
     componentDidMount() {
@@ -59,6 +107,7 @@ class ViewArea extends Component {
         }
 
         this.camera = this.createCamera(canvas, 1000, 1000, 200);
+        this.camera.name = "camera";
         this.controls = this.createControls(canvas, this.camera);
 
         this.createDebugMeshes();
@@ -69,16 +118,24 @@ class ViewArea extends Component {
             this.createOrthographicCameras();
             this.createTextureMatrices();
 
+            this.shaderMaterial.uniforms.displayBorders.value = this.displayBorders ? 1 : 0;
+            this.shaderMaterial.uniforms.splitCount.value = this.splitCount;
+
             renderer.render(this.bufferScene, this.orthographicCameras[0]);
-            for (let i = 0; i < this.bufferTextures.length; ++i) {
+            for (let i = 0; i < this.splitCount; ++i) {
                 renderer.setRenderTarget(this.bufferTextures[i]);
                 renderer.render(this.bufferScene, this.orthographicCameras[i]);
             }
             renderer.setRenderTarget(null);
             renderer.render(this.scene, this.camera);
-            renderer.autoClear = false;
-            renderer.render(this.debugScene, this.camera);
-            renderer.autoClear = true;
+            if (this.displayTextures) {
+                this.debugScene.add(this.camera);
+                renderer.autoClear = false;
+                renderer.render(this.debugScene, this.camera);
+                renderer.autoClear = true;
+            } else {
+                this.debugScene.remove(this.camera);
+            }
 
             requestAnimationFrame(renderLoopTick);
         };
@@ -192,10 +249,14 @@ class ViewArea extends Component {
             splitCount: {type: "i", value: this.splitCount},
             vectorsTextures: {
                 type: "tv", value: this.bufferTextures.map(function (bt) {
-                    return bt.texture;
+                    if (bt !== null) {
+                        return bt.texture;
+                    }
+                    return null;
                 })
             },
-            textureMatrices: {type: "m4v", value: new Array(4).fill(new THREE.Matrix4())}
+            textureMatrices: {type: "m4v", value: new Array(this.maxSplitCount).fill(new THREE.Matrix4())},
+            displayBorders: {type: "i", value: 0}
         };
 
         const plane = new THREE.Mesh(geometry, this.shaderMaterial);
@@ -247,10 +308,10 @@ class ViewArea extends Component {
         this.maxSplitDistances[0] = near;
 
         switch (this.currentSplitType) {
-            case "log":
+            case "logarithmic":
                 this.calculateLogarithmicMaxSplitDistance(near, far, this.splitCount, this.splitLambda, this.maxSplitDistances);
                 break;
-            case "lin":
+            case "linear":
                 this.calculateLinearMaxSplitDistance(near, far, this.splitCount, this.maxSplitDistances);
                 break;
             case "mixed":
@@ -258,8 +319,9 @@ class ViewArea extends Component {
                 let distancesLogarithmic = [...this.maxSplitDistances];
                 this.calculateLinearMaxSplitDistance(near, far, this.splitCount, distancesLinear);
                 this.calculateLogarithmicMaxSplitDistance(near, far, this.splitCount, this.splitLambda, distancesLogarithmic);
+                let mixParameter = this.mixParameter;
                 this.maxSplitDistances = distancesLinear.map(function (elem, index) {
-                    return elem * this.mixParameter + distancesLogarithmic[index] * (1 - this.mixParameter);
+                    return elem * mixParameter + distancesLogarithmic[index] * (1 - mixParameter);
                 });
                 break;
 
@@ -323,7 +385,7 @@ class ViewArea extends Component {
     }
 
     createTextureMatrices() {
-        let matrices = [];
+        let matrices = new Array(this.maxSplitCount).fill(new THREE.Matrix4());
         for (let i = 0; i < this.orthographicCameras.length; ++i) {
             matrices[i] = this.orthographicCameras[i].projectionMatrix;
         }
@@ -334,7 +396,7 @@ class ViewArea extends Component {
         const debugSize = 150;
 
         this.debugScene.add(this.camera);
-        for (let i = 0; i < this.bufferTextures.length; ++i) {
+        for (let i = 0; i < this.splitCount; ++i) {
             const textureGeometry = new THREE.PlaneBufferGeometry(debugSize * this.camera.aspect, debugSize, 128, 128);
             const textureMaterial = new THREE.MeshBasicMaterial({map: this.bufferTextures[i].texture, depthTest: false});
             const textureMesh = new THREE.Mesh(textureGeometry, textureMaterial);
