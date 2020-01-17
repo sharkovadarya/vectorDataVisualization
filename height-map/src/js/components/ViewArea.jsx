@@ -1,6 +1,7 @@
 import React, {Component} from "react";
 import * as THREE from 'three-full';
 import * as dat from 'dat.gui'
+
 import vxShader from '../../shaders/main.vert';
 import fragShader from '../../shaders/main.frag';
 
@@ -27,10 +28,9 @@ class ViewArea extends Component {
         this.divRef = React.createRef();
 
         this.splitCount = 8;
-        this.splitLambda = 0.5;
+        this.splitLambda = 1.0;
         this.maxSplitDistances = [];
         this.currentSplitType = "logarithmic";
-        this.mixParameter = 0.0;
 
         this.orthographicCameras = [];
         this.bufferTextures = new Array(this.maxSplitCount).fill(null);
@@ -50,7 +50,7 @@ class ViewArea extends Component {
 
         this.shaderMaterial = new THREE.ShaderMaterial({uniforms: {}, vertexShader: vxShader, fragmentShader: fragShader});
 
-        this.createMeshes();
+        this.terrain = this.createMeshes();
 
         this.debugScene = new THREE.Scene();
 
@@ -60,7 +60,7 @@ class ViewArea extends Component {
         const CSMParameters = function () {
             this.splitCount = 8;
             this.splitType = "logarithmic";
-            this.mixParameter = 0.0;
+            this.splitLambda = 1.0;
             this.displayBorders = true;
             this.displayTextures = true;
         };
@@ -71,7 +71,7 @@ class ViewArea extends Component {
             let gui = new dat.GUI();
             gui.add(parameters, 'splitCount').min(1).max(refs.maxSplitCount).step(1);
             gui.add(parameters, 'splitType', ["logarithmic", "linear", "mixed"]);
-            gui.add(parameters, 'mixParameter').min(0.0).max(1.0).step(0.001);
+            gui.add(parameters, 'splitLambda').min(0.0).max(1.0).step(0.001);
             gui.add(parameters, 'displayBorders');
             gui.add(parameters, 'displayTextures');
 
@@ -79,10 +79,10 @@ class ViewArea extends Component {
                 requestAnimationFrame(update);
                 switch (parameters.splitType) {
                     case "logarithmic":
-                        parameters.mixParameter = 0.0;
+                        parameters.splitLambda = 1.0;
                         break;
                     case "linear":
-                        parameters.mixParameter = 1.0;
+                        parameters.splitLambda = 0.0;
                         break;
                 }
 
@@ -92,7 +92,7 @@ class ViewArea extends Component {
 
                 refs.splitCount = parameters.splitCount;
                 refs.currentSplitType = parameters.splitType;
-                refs.mixParameter = parameters.mixParameter;
+                refs.splitLambda = parameters.splitLambda;
                 refs.displayBorders = parameters.displayBorders;
                 refs.displayTextures = parameters.displayTextures;
             };
@@ -121,7 +121,7 @@ class ViewArea extends Component {
             this.shaderMaterial.uniforms.displayBorders.value = this.displayBorders ? 1 : 0;
             this.shaderMaterial.uniforms.splitCount.value = this.splitCount;
 
-            renderer.render(this.bufferScene, this.orthographicCameras[0]);
+            //renderer.render(this.bufferScene, this.orthographicCameras[0]);
             for (let i = 0; i < this.splitCount; ++i) {
                 renderer.setRenderTarget(this.bufferTextures[i]);
                 renderer.render(this.bufferScene, this.orthographicCameras[i]);
@@ -173,13 +173,13 @@ class ViewArea extends Component {
         const controls = new THREE.OrbitControls(camera, canvas);
         const obj = this;
         function onControlsChange(o) {
-            obj.cameraControlsTriggered = true;
+            /*obj.cameraControlsTriggered = true;
             obj.createOrthographicCameras();
             console.log("world matrix", obj.camera.matrixWorld);
             console.log("projection matrix", obj.camera.projectionMatrix);
             console.log("position", obj.camera.position);
 
-            obj.cameraControlsTriggered = false;
+            obj.cameraControlsTriggered = false;*/
 
         }
         controls.addEventListener('change', onControlsChange);
@@ -263,8 +263,10 @@ class ViewArea extends Component {
         plane.position.set(0, -150, 0);
         plane.rotation.x = -Math.PI / 2;
         this.scene.add(plane);
-    }
 
+        return plane;
+    }
+    
     initBufferTexture() {
         for (let i = 0; i < this.splitCount; ++i) {
             this.bufferTextures[i] = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
@@ -286,45 +288,18 @@ class ViewArea extends Component {
         }
     }
 
-    calculateLogarithmicMaxSplitDistance(near, far, splitCount, splitLambda, maxSplitDistances) {
-        for (let i = 1; i < splitCount + 1; i++) {
-            let f = i / (splitCount + 1);
-            let l = near * Math.pow(far / near, f);
-            let u = near + (far - near) * f;
-            maxSplitDistances[i] = l * splitLambda + u * (1 - splitLambda);
-        }
-    }
 
-    calculateLinearMaxSplitDistance(near, far, splitCount, maxSplitDistances) {
-        const distance = far - near;
-        for (let i = 1; i < splitCount + 1; i++) {
-            maxSplitDistances[i] = maxSplitDistances[i - 1] + distance / (splitCount - 1);
-        }
-    }
 
     calculateMaxSplitDistances(camera) {
         const near = camera.near;
         const far = camera.far;
         this.maxSplitDistances[0] = near;
 
-        switch (this.currentSplitType) {
-            case "logarithmic":
-                this.calculateLogarithmicMaxSplitDistance(near, far, this.splitCount, this.splitLambda, this.maxSplitDistances);
-                break;
-            case "linear":
-                this.calculateLinearMaxSplitDistance(near, far, this.splitCount, this.maxSplitDistances);
-                break;
-            case "mixed":
-                let distancesLinear = [...this.maxSplitDistances];
-                let distancesLogarithmic = [...this.maxSplitDistances];
-                this.calculateLinearMaxSplitDistance(near, far, this.splitCount, distancesLinear);
-                this.calculateLogarithmicMaxSplitDistance(near, far, this.splitCount, this.splitLambda, distancesLogarithmic);
-                let mixParameter = this.mixParameter;
-                this.maxSplitDistances = distancesLinear.map(function (elem, index) {
-                    return elem * mixParameter + distancesLogarithmic[index] * (1 - mixParameter);
-                });
-                break;
-
+        for (let i = 1; i < this.splitCount + 1; i++) {
+            let f = i / (this.splitCount + 1);
+            let l = near * Math.pow(far / near, f);
+            let u = near + (far - near) * f;
+            this.maxSplitDistances[i] = l * this.splitLambda + u * (1 - this.splitLambda);
         }
     }
 
@@ -341,34 +316,53 @@ class ViewArea extends Component {
             world_corners.push(v_cam);
         }
         return world_corners.map(function (p) {
-            return new THREE.Vector3(p.x * -1, p.y * -1, p.z * -1);
+            return new THREE.Vector3(p.x, p.y, p.z);
         });
     }
 
-    getProjectionMatrixForFrustum(camera) {
-        const frustumCorners = this.calculateCameraFrustumCorners(camera);
-
-        if (this.cameraControlsTriggered) {
-            console.log("frustum corners", frustumCorners);
-        }
-
+    calculateBoundingBox(points) {
         let minX = Number.MAX_VALUE;
         let maxX = Number.MIN_VALUE;
         let minY = Number.MAX_VALUE;
         let maxY = Number.MIN_VALUE;
         let minZ = Number.MAX_VALUE;
         let maxZ = Number.MIN_VALUE;
-        for (let i = 0; i < frustumCorners.length; i++) {
-            let corner = frustumCorners[i];
-            minX = Math.min(corner.x, minX);
-            maxX = Math.max(corner.x, maxX);
-            minY = Math.min(corner.y, minY);
-            maxY = Math.max(corner.y, maxY);
-            minZ = Math.min(corner.z, minZ);
-            maxZ = Math.max(corner.z, maxZ);
+        for (const point of points) {
+            minX = Math.min(point.x, minX);
+            maxX = Math.max(point.x, maxX);
+            minY = Math.min(point.y, minY);
+            maxY = Math.max(point.y, maxY);
+            minZ = Math.min(point.z, minZ);
+            maxZ = Math.max(point.z, maxZ);
         }
 
-        return new THREE.OrthographicCamera(minX / 8, maxX / 8, maxY / 8, minY / 8, minZ, maxZ);
+        return {minX: minX, minY: minY, minZ: minZ, maxX: maxX, maxY: maxY, maxZ: maxZ};
+    }
+
+    getOrthographicCameraForPerspectiveCamera(camera) {
+        const frustumCorners = this.calculateCameraFrustumCorners(camera);
+
+        if (this.cameraControlsTriggered) {
+            console.log("frustum corners", frustumCorners);
+        }
+
+        // format: minX, minY, minZ, maxX, maxY, maxZ
+        const boundingBox = this.calculateBoundingBox(frustumCorners);
+        let minY = boundingBox.minX / camera.aspect;
+        let maxY = boundingBox.maxX / camera.aspect;
+
+        return new THREE.OrthographicCamera(
+            boundingBox.minX / 8,
+            boundingBox.maxX / 8,
+            maxY / 8,
+            minY / 8,
+            /*boundingBox.maxY / 8,
+            boundingBox.minY / 8,*/
+            //0,
+            //boundingBox.maxZ - boundingBox.minZ
+            boundingBox.minZ,
+            boundingBox.maxZ
+        );
     }
 
     createOrthographicCameras() {
@@ -379,8 +373,7 @@ class ViewArea extends Component {
             currentCamera.position.set(this.camera.position.x, this.camera.position.y, this.camera.position.z);
             currentCamera.rotation.set(this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z);
             currentCamera.updateMatrixWorld( true );
-            this.orthographicCameras[i] = this.getProjectionMatrixForFrustum(currentCamera);
-            this.orthographicCameras[i].position.z = currentCamera.near + 1;
+            this.orthographicCameras[i] = this.getOrthographicCameraForPerspectiveCamera(currentCamera);
         }
     }
 
