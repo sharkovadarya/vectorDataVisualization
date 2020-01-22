@@ -1,6 +1,6 @@
 //#pragma loader: import {process} from './../shaders/lib.glsl';
 
-const int MAX_SPLITS = 16;
+const int MAX_SPLITS = 6;
 
 uniform sampler2D bumpTexture;
 uniform float bumpScale;
@@ -30,7 +30,7 @@ void main()
     if (i >= splitCount) {
       break;
     }
-    projected_texcoords[i] = textureMatrices[i] * pos4;
+    projected_texcoords[i] = textureMatrices[i] * modelMatrix * pos4;
   }
 
 
