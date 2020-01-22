@@ -1,4 +1,4 @@
-const int MAX_SPLITS = 16;
+const int MAX_SPLITS = 6;
 
 uniform sampler2D oceanTexture;
 uniform sampler2D sandyTexture;

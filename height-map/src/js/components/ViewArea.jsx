@@ -22,7 +22,7 @@ class ViewArea extends Component {
         this.state = {};
 
         // TODO where to store constants?
-        this.maxSplitCount = 16;
+        this.maxSplitCount = 6;
 
         this.canvasRef = React.createRef();
         this.divRef = React.createRef();
@@ -58,8 +58,8 @@ class ViewArea extends Component {
         this.cameraControlsTriggered = false;
 
         const CSMParameters = function () {
-            this.splitCount = 8;
-            this.splitType = "logarithmic";
+            this.splitCount = 6;
+            this.splitType = "linear";
             this.splitLambda = 1.0;
             this.displayBorders = true;
             this.displayTextures = true;
@@ -161,7 +161,7 @@ class ViewArea extends Component {
         const fov = 45;
         const aspect = canvas.width / canvas.height;
         const near = 0.1;
-        const far = 20000;
+        const far = 10000;
 
         let camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
         camera.position.set(positionX, positionY, positionZ);
@@ -282,17 +282,18 @@ class ViewArea extends Component {
                 color.setHex(Math.random() * 0xffffff);
                 const material = new THREE.MeshBasicMaterial({color: color});
                 const mesh = new THREE.Mesh(geometry, material);
-                mesh.position.set(-600 + 300 * i, -300 + 300 * j, 0);
+                mesh.position.set(-600 + 300 * i, 0, -300 + 300 * j);
+                mesh.rotation.set(-Math.PI / 2, 0, 0);
                 this.bufferScene.add(mesh);
-            }
+              }
         }
     }
 
 
 
     calculateMaxSplitDistances(camera) {
-        const near = camera.near;
-        const far = camera.far;
+        const near = 1;
+        const far = 10000;
         this.maxSplitDistances[0] = near;
 
         for (let i = 1; i < this.splitCount + 1; i++) {
@@ -321,12 +322,12 @@ class ViewArea extends Component {
     }
 
     calculateBoundingBox(points) {
-        let minX = Number.MAX_VALUE;
-        let maxX = Number.MIN_VALUE;
-        let minY = Number.MAX_VALUE;
-        let maxY = Number.MIN_VALUE;
-        let minZ = Number.MAX_VALUE;
-        let maxZ = Number.MIN_VALUE;
+        let minX = Number.POSITIVE_INFINITY;
+        let maxX = Number.NEGATIVE_INFINITY;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+        let minZ = Number.POSITIVE_INFINITY;
+        let maxZ = Number.NEGATIVE_INFINITY;
         for (const point of points) {
             minX = Math.min(point.x, minX);
             maxX = Math.max(point.x, maxX);
@@ -348,21 +349,25 @@ class ViewArea extends Component {
 
         // format: minX, minY, minZ, maxX, maxY, maxZ
         const boundingBox = this.calculateBoundingBox(frustumCorners);
-        let minY = boundingBox.minX / camera.aspect;
-        let maxY = boundingBox.maxX / camera.aspect;
 
-        return new THREE.OrthographicCamera(
-            boundingBox.minX / 8,
-            boundingBox.maxX / 8,
-            maxY / 8,
-            minY / 8,
-            /*boundingBox.maxY / 8,
-            boundingBox.minY / 8,*/
-            //0,
-            //boundingBox.maxZ - boundingBox.minZ
-            boundingBox.minZ,
-            boundingBox.maxZ
+        let rangeX = boundingBox.maxX - boundingBox.minX; 
+        let centerX = (boundingBox.maxX + boundingBox.minX) / 2; 
+        let rangeY = boundingBox.maxZ - boundingBox.minZ; 
+        let centerY = (boundingBox.maxZ + boundingBox.minZ) / 2; 
+
+        let cam = new THREE.OrthographicCamera(
+            -rangeX / 2,
+            rangeX / 2,
+            rangeY / 2,
+            -rangeY / 2,
+            -1000,
+            2000
         );
+        cam.position.set(centerX, 500, centerY);
+        cam.rotation.set(-Math.PI / 2, 0, 0);
+        cam.updateMatrixWorld( true );
+
+        return cam;
     }
 
     createOrthographicCameras() {
@@ -380,7 +385,10 @@ class ViewArea extends Component {
     createTextureMatrices() {
         let matrices = new Array(this.maxSplitCount).fill(new THREE.Matrix4());
         for (let i = 0; i < this.orthographicCameras.length; ++i) {
-            matrices[i] = this.orthographicCameras[i].projectionMatrix;
+          
+          let m = this.orthographicCameras[i].projectionMatrix.clone();
+          m.multiply(this.orthographicCameras[i].matrixWorldInverse);
+          matrices[i] = m;
         }
         this.shaderMaterial.uniforms['textureMatrices'].value = matrices;
     }
