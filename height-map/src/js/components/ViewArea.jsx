@@ -22,7 +22,7 @@ class ViewArea extends Component {
         this.state = {};
 
         // TODO where to store constants?
-        this.maxSplitCount = 6;
+        this.maxSplitCount = 16;
 
         this.canvasRef = React.createRef();
         this.divRef = React.createRef();
@@ -30,7 +30,6 @@ class ViewArea extends Component {
         this.splitCount = 8;
         this.splitLambda = 1.0;
         this.maxSplitDistances = [];
-        this.currentSplitType = "logarithmic";
 
         this.orthographicCameras = [];
         this.bufferTextures = new Array(this.maxSplitCount).fill(null);
@@ -58,7 +57,7 @@ class ViewArea extends Component {
         this.cameraControlsTriggered = false;
 
         const CSMParameters = function () {
-            this.splitCount = 6;
+            this.splitCount = 4;
             this.splitType = "linear";
             this.splitLambda = 1.0;
             this.displayBorders = true;
@@ -171,18 +170,6 @@ class ViewArea extends Component {
 
     createControls(canvas, camera) {
         const controls = new THREE.OrbitControls(camera, canvas);
-        const obj = this;
-        function onControlsChange(o) {
-            /*obj.cameraControlsTriggered = true;
-            obj.createOrthographicCameras();
-            console.log("world matrix", obj.camera.matrixWorld);
-            console.log("projection matrix", obj.camera.projectionMatrix);
-            console.log("position", obj.camera.position);
-
-            obj.cameraControlsTriggered = false;*/
-
-        }
-        controls.addEventListener('change', onControlsChange);
         /*controls.maxDistance = 4500;
         controls.maxPolarAngle = Math.PI / 2 - Math.PI / 8;
         controls.minDistance = 300;
@@ -201,7 +188,14 @@ class ViewArea extends Component {
     }
 
     createRenderer(canvas) {
-        let renderer = new THREE.WebGLRenderer({antialias: true, alpha: true, preserveDrawingBuffer: true, canvas: canvas});
+        const context = canvas.getContext('webgl2');
+        let renderer = new THREE.WebGLRenderer({
+            antialias: true,
+            alpha: true,
+            preserveDrawingBuffer: true,
+            canvas: canvas,
+            context: context
+        });
 
         renderer.setSize(canvas.width, canvas.height);
         renderer.setPixelRatio(window.devicePixelRatio);
@@ -266,7 +260,7 @@ class ViewArea extends Component {
 
         return plane;
     }
-    
+
     initBufferTexture() {
         for (let i = 0; i < this.splitCount; ++i) {
             this.bufferTextures[i] = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
@@ -350,10 +344,10 @@ class ViewArea extends Component {
         // format: minX, minY, minZ, maxX, maxY, maxZ
         const boundingBox = this.calculateBoundingBox(frustumCorners);
 
-        let rangeX = boundingBox.maxX - boundingBox.minX; 
-        let centerX = (boundingBox.maxX + boundingBox.minX) / 2; 
-        let rangeY = boundingBox.maxZ - boundingBox.minZ; 
-        let centerY = (boundingBox.maxZ + boundingBox.minZ) / 2; 
+        let rangeX = boundingBox.maxX - boundingBox.minX;
+        let centerX = (boundingBox.maxX + boundingBox.minX) / 2;
+        let rangeY = boundingBox.maxZ - boundingBox.minZ;
+        let centerY = (boundingBox.maxZ + boundingBox.minZ) / 2;
 
         let cam = new THREE.OrthographicCamera(
             -rangeX / 2,
@@ -385,7 +379,7 @@ class ViewArea extends Component {
     createTextureMatrices() {
         let matrices = new Array(this.maxSplitCount).fill(new THREE.Matrix4());
         for (let i = 0; i < this.orthographicCameras.length; ++i) {
-          
+
           let m = this.orthographicCameras[i].projectionMatrix.clone();
           m.multiply(this.orthographicCameras[i].matrixWorldInverse);
           matrices[i] = m;
