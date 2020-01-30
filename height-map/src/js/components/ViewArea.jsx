@@ -29,6 +29,9 @@ class ViewArea extends Component {
 
         this.splitCount = 8;
         this.splitLambda = 1.0;
+        // TODO
+        this.near = 0.1;
+        this.far = 10000;
         this.maxSplitDistances = [];
 
         this.orthographicCameras = [];
@@ -40,7 +43,9 @@ class ViewArea extends Component {
 
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color('lightblue');
-        this.scene.fog = new THREE.Fog('lightblue', 1, 6000);
+        //this.scene.fog = new THREE.Fog('lightblue', 1, 6000);
+
+        this.terrainBumpScale = 400.0;
 
         this.bufferScene = new THREE.Scene();
         this.initBufferTexture();
@@ -53,8 +58,10 @@ class ViewArea extends Component {
 
         this.debugScene = new THREE.Scene();
 
-        // trace camera parameters
-        this.cameraControlsTriggered = false;
+        this.lowerPlane = null;
+        this.upperPlane = null;
+        this.near = 1;
+        this.far = 20000;
 
         const CSMParameters = function () {
             this.splitCount = 4;
@@ -63,6 +70,8 @@ class ViewArea extends Component {
             this.displayBorders = true;
             this.displayTextures = true;
         };
+
+        this.debugCount = 0;
 
         let refs = this;
         window.onload = function() {
@@ -111,9 +120,24 @@ class ViewArea extends Component {
 
         this.createDebugMeshes();
 
+        this.createTerrainBorderPlanes(canvas);
+
         const renderer = this.createRenderer(canvas);
 
         const renderLoopTick = () => {
+            this.debugCount++;
+            /*if (this.debugCount === 200) {
+                let fakeCamera = this.createCamera(canvas, this.camera.position.x, this.camera.position.y, this.camera.position.z);
+                fakeCamera.rotation.set(this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z);
+                let v = new THREE.Vector3();
+                this.camera.getWorldDirection(v);
+                fakeCamera.lookAt(v);
+                let helper = new THREE.CameraHelper(fakeCamera);
+                helper.material.linewidth = 4;
+                helper.material.color = new THREE.Color('black');
+                this.scene.add(helper);
+            }*/
+
             this.createOrthographicCameras();
             this.createTextureMatrices();
 
@@ -160,7 +184,7 @@ class ViewArea extends Component {
         const fov = 45;
         const aspect = canvas.width / canvas.height;
         const near = 0.1;
-        const far = 10000;
+        const far = 20000;
 
         let camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
         camera.position.set(positionX, positionY, positionZ);
@@ -218,28 +242,27 @@ class ViewArea extends Component {
         oceanTexture.wrapS = oceanTexture.wrapT = THREE.RepeatWrapping;
         const sandyTexture = textureLoader.load(sandTexture);
         sandyTexture.wrapS = sandyTexture.wrapT = THREE.RepeatWrapping;
-        const grassTexture = textureLoader.load(grassTexture);
-        grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
         const rockyTexture = textureLoader.load(rockTexture);
         rockyTexture.wrapS = rockyTexture.wrapT = THREE.RepeatWrapping;
         const snowyTexture = textureLoader.load(snowTexture);
         snowyTexture.wrapS = snowyTexture.wrapT = THREE.RepeatWrapping;
         const greenTexture = textureLoader.load(meadowTexture);
         greenTexture.wrapS = greenTexture.wrapT = THREE.RepeatWrapping;
-        // magnitude of normal displacement
-        const bumpScale = 400.0;
 
         this.shaderMaterial.uniforms = {
             bumpTexture: {type: "t", value: bumpTexture},
-            bumpScale: {type: "f", value: bumpScale},
+            bumpScale: {type: "f", value: this.terrainBumpScale},
             oceanTexture: {type: "t", value: oceanTexture},
             sandyTexture: {type: "t", value: sandyTexture},
             grassTexture: {type: "t", value: greenTexture},
             rockyTexture: {type: "t", value: rockyTexture},
             snowyTexture: {type: "t", value: snowyTexture},
-            fogColor: {type: "c", value: this.scene.fog.color},
-            fogNear: {type: "f", value: this.scene.fog.near},
-            fogFar: {type: "f", value: this.scene.fog.far},
+            //fogColor: {type: "c", value: this.scene.fog.color},
+            //fogNear: {type: "f", value: this.scene.fog.near},
+            //fogFar: {type: "f", value: this.scene.fog.far},
+            fogColor: {type: "c", value: null},
+            fogNear: {type: "f", value: 0},
+            fogFar: {type: "f", value: 0},
             splitCount: {type: "i", value: this.splitCount},
             vectorsTextures: {
                 type: "tv", value: this.bufferTextures.map(function (bt) {
@@ -286,8 +309,8 @@ class ViewArea extends Component {
 
 
     calculateMaxSplitDistances(camera) {
-        const near = 1;
-        const far = 10000;
+        const near = this.near;
+        const far = this.far;
         this.maxSplitDistances[0] = near;
 
         for (let i = 1; i < this.splitCount + 1; i++) {
@@ -336,10 +359,6 @@ class ViewArea extends Component {
 
     getOrthographicCameraForPerspectiveCamera(camera) {
         const frustumCorners = this.calculateCameraFrustumCorners(camera);
-
-        if (this.cameraControlsTriggered) {
-            console.log("frustum corners", frustumCorners);
-        }
 
         // format: minX, minY, minZ, maxX, maxY, maxZ
         const boundingBox = this.calculateBoundingBox(frustumCorners);
@@ -400,6 +419,187 @@ class ViewArea extends Component {
             textureMesh.position.set(-550 + (textureMesh.geometry.parameters.width + 50) * i, -300, -1000);
         }
     }
+
+    createTerrainBorderPlanes() {
+        const heightMapImage = new Image();
+        heightMapImage.src = heightMapTexture;
+        const ref = this;
+        heightMapImage.onload = function (img) {
+            // TODO why is the value lower than it should be?
+            // image is stored in RGBA -> every ith element for which (i % 4 == 0) is for R
+            // but heightMax is 146
+            // and you can see the resulting plane intersecting the terrain, which should not happen
+            // which means that the value in vertex shader is higher than the value i get here
+            // how is this possible?
+
+            /*const canvas = document.createElement("canvas");
+            const context = canvas.getContext('2d');
+            context.drawImage(heightMapImage, 0, 0);
+            const info = context.getImageData(0, 0, heightMapImage.width, heightMapImage.height);
+            const heightInfo = info.data.filter(function (value, index) {
+                return index % 4 === 0;
+            });
+            let heightMax = Number.NEGATIVE_INFINITY;
+            heightInfo.forEach(elem => {
+                heightMax = Math.max(heightMax, elem);
+            });*/
+
+
+            // TODO refactor
+            const terrain = ref.terrain;
+            const terrainGeometry = terrain.geometry;
+            ref.lowerPlane = new THREE.Mesh(new THREE.PlaneGeometry(terrainGeometry.parameters.width, terrainGeometry.parameters.height), new THREE.MeshBasicMaterial({
+                color: "green",
+                wireframe: true
+            }));
+            ref.upperPlane = new THREE.Mesh(new THREE.PlaneGeometry(terrainGeometry.parameters.width, terrainGeometry.parameters.height), new THREE.MeshBasicMaterial({
+                color: "green",
+                wireframe: true
+            }));
+
+            let debugGeometry = new THREE.Geometry().fromBufferGeometry(terrainGeometry);
+            debugGeometry.computeFaceNormals();
+            debugGeometry.computeFlatVertexNormals();
+            debugGeometry.computeMorphNormals();
+            debugGeometry.computeVertexNormals();
+            console.log(debugGeometry);
+
+            ref.lowerPlane.rotation.set(terrain.rotation.x, terrain.rotation.y, terrain.rotation.z);
+            ref.lowerPlane.position.set(terrain.position.x, terrain.position.y, terrain.position.z);
+            ref.lowerPlane.position.y -= ref.terrainBumpScale;
+            ref.upperPlane.rotation.set(terrain.rotation.x, terrain.rotation.y, terrain.rotation.z);
+            ref.upperPlane.position.set(terrain.position.x, terrain.position.y, terrain.position.z);
+            ref.upperPlane.position.y += ref.terrainBumpScale;
+            ref.calculateNearAndFar()
+        };
+    }
+
+    createFrustumFromCamera(camera) {
+        return new THREE.Frustum().setFromMatrix(
+            new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+        );
+    }
+
+    setPointOfIntersection(plane, line, intersectionPoints) {
+        let pointOfIntersection = plane.intersectLine(line);
+        if (pointOfIntersection) {
+            intersectionPoints.push(pointOfIntersection)
+        }
+    }
+
+    findPlaneIntersection(mathPlane, meshPlane) {
+        let a = new THREE.Vector3();
+        let b = new THREE.Vector3();
+        let c = new THREE.Vector3();
+
+        let intersectionPoints = [];
+        let obj = this;
+        meshPlane.geometry.faces.forEach(function (face) {
+            meshPlane.localToWorld(a.copy(meshPlane.geometry.vertices[face.a]));
+            meshPlane.localToWorld(b.copy(meshPlane.geometry.vertices[face.b]));
+            meshPlane.localToWorld(c.copy(meshPlane.geometry.vertices[face.c]));
+            let lineAB = new THREE.Line3(a, b);
+            let lineBC = new THREE.Line3(b, c);
+            let lineCA = new THREE.Line3(c, a);
+            obj.setPointOfIntersection(mathPlane, lineAB, intersectionPoints);
+            obj.setPointOfIntersection(mathPlane, lineBC, intersectionPoints);
+            obj.setPointOfIntersection(mathPlane, lineCA, intersectionPoints);
+        });
+        return intersectionPoints;
+    }
+
+    findFrustumAndPlaneIntersections(frustum, plane) {
+        let intersectionPoints = [];
+        frustum.planes.forEach(fp => intersectionPoints = intersectionPoints.concat(this.findPlaneIntersection(fp, plane)));
+        return intersectionPoints;
+    }
+
+    // order:
+    // 1 ------ 2
+    // |        |
+    // |        |
+    // 3 ------ 4
+    // first upper plane, then lower plane
+    // vertices[0] -> upper 1
+    // vertices[7] -> lower 4
+    getBoundingBoxSidePlanes(vertices) {
+        return [
+            new THREE.Plane().setFromCoplanarPoints(vertices.upper[0], vertices.upper[2], vertices.lower[0]),
+            new THREE.Plane().setFromCoplanarPoints(vertices.upper[2], vertices.upper[3], vertices.lower[2]),
+            new THREE.Plane().setFromCoplanarPoints(vertices.upper[3], vertices.upper[1], vertices.lower[3]),
+            new THREE.Plane().setFromCoplanarPoints(vertices.upper[1], vertices.upper[0], vertices.lower[1]),
+        ];
+    }
+
+    calculateNearAndFar() {
+        this.scene.add(this.lowerPlane);
+        this.scene.add(this.upperPlane);
+
+        let cameraFrustum = this.createFrustumFromCamera(this.camera);
+        this.lowerPlane.updateMatrixWorld(true);
+        this.upperPlane.updateMatrixWorld(true);
+
+        let lowerPlaneIntersectionPoints = this.findFrustumAndPlaneIntersections(cameraFrustum, this.lowerPlane);
+        let upperPlaneIntersectionPoints = this.findFrustumAndPlaneIntersections(cameraFrustum, this.upperPlane);
+
+        const canvas = this.canvasRef.current;
+        const vectorTextureBoundingBoxCoordinates = {
+            upper: [
+                new THREE.Vector3(canvas.width /  2, this.camera.position.y,     canvas.height /  2),
+                new THREE.Vector3(canvas.width / -2, this.camera.position.y,     canvas.height /  2),
+                new THREE.Vector3(canvas.width / -2, this.camera.position.y,     canvas.height / -2),
+                new THREE.Vector3(canvas.width /  2, this.camera.position.y,     canvas.height / -2),
+            ],
+            lower: [
+                new THREE.Vector3(canvas.width /  2, this.lowerPlane.position.y, canvas.height /  2),
+                new THREE.Vector3(canvas.width / -2, this.lowerPlane.position.y, canvas.height /  2),
+                new THREE.Vector3(canvas.width / -2, this.lowerPlane.position.y, canvas.height / -2),
+                new THREE.Vector3(canvas.width /  2, this.lowerPlane.position.y, canvas.height / -2),
+            ]
+        };
+        let planes = this.getBoundingBoxSidePlanes(vectorTextureBoundingBoxCoordinates);
+
+        let texturesBoxIntersectionPoints = [];
+        planes.forEach(plane => {
+            for (let i = 1; i < upperPlaneIntersectionPoints.length; i++) {
+                const line = new THREE.Line3(upperPlaneIntersectionPoints[i - 1], upperPlaneIntersectionPoints[i]);
+                this.setPointOfIntersection(plane, line, texturesBoxIntersectionPoints);
+            }
+        });
+
+        let intersectionPointsInViewSpace = texturesBoxIntersectionPoints.map(it => it.applyMatrix4(this.camera.matrixWorldInverse))
+
+        /*this.near = Math.max(this.camera.near, Math.min(...intersectionPointsInViewSpace.map(it => it.z)));
+        this.far = Math.min(this.camera.far, Math.max(...intersectionPointsInViewSpace.map(it => it.z)));
+        console.log(this.near, this.far);*/
+
+
+        // debug display
+        let textureBoxAndBoundingPlanesIntersectionsGeometry = new THREE.Geometry();
+        texturesBoxIntersectionPoints.forEach(it => textureBoxAndBoundingPlanesIntersectionsGeometry.vertices.push(it));
+        let frustumAndBoundingPlanesIntersectionGeometry = new THREE.Geometry();
+        lowerPlaneIntersectionPoints.forEach(it => frustumAndBoundingPlanesIntersectionGeometry.vertices.push(it));
+        upperPlaneIntersectionPoints.forEach(it => frustumAndBoundingPlanesIntersectionGeometry.vertices.push(it));
+        let points1 = new THREE.Points(textureBoxAndBoundingPlanesIntersectionsGeometry, new THREE.PointsMaterial({
+            size: 100,
+            color: 0xffff00
+        }));
+        this.scene.add(points1);
+
+        let points2 = new THREE.Points(frustumAndBoundingPlanesIntersectionGeometry, new THREE.PointsMaterial({
+            size: 100,
+            color: 0x34eba1
+        }));
+        this.scene.add(points2);
+
+        let boxGeometry = new THREE.BoxGeometry(window.innerWidth, 10000, window.innerHeight);
+        let boxMesh = new THREE.Mesh(boxGeometry, new THREE.MeshBasicMaterial({
+            wireframe: true,
+            color: new THREE.Color("blue")
+        }));
+        this.scene.add(boxMesh);
+    }
+
 }
 
 const mapStateToProps = (state /*, ownProps*/) => {
