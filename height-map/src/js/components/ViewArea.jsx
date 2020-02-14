@@ -58,8 +58,6 @@ class ViewArea extends Component {
 
         this.debugScene = new THREE.Scene();
 
-        this.lowerPlane = null;
-        this.upperPlane = null;
         this.near = 1;
         this.far = 20000;
 
@@ -120,23 +118,10 @@ class ViewArea extends Component {
 
         this.createDebugMeshes();
 
-        this.createTerrainBorderPlanes(canvas);
-
         const renderer = this.createRenderer(canvas);
 
         const renderLoopTick = () => {
             this.debugCount++;
-            /*if (this.debugCount === 200) {
-                let fakeCamera = this.createCamera(canvas, this.camera.position.x, this.camera.position.y, this.camera.position.z);
-                fakeCamera.rotation.set(this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z);
-                let v = new THREE.Vector3();
-                this.camera.getWorldDirection(v);
-                fakeCamera.lookAt(v);
-                let helper = new THREE.CameraHelper(fakeCamera);
-                helper.material.linewidth = 4;
-                helper.material.color = new THREE.Color('black');
-                this.scene.add(helper);
-            }*/
 
             this.createOrthographicCameras();
             this.createTextureMatrices();
@@ -144,7 +129,6 @@ class ViewArea extends Component {
             this.shaderMaterial.uniforms.displayBorders.value = this.displayBorders ? 1 : 0;
             this.shaderMaterial.uniforms.splitCount.value = this.splitCount;
 
-            //renderer.render(this.bufferScene, this.orthographicCameras[0]);
             for (let i = 0; i < this.splitCount; ++i) {
                 renderer.setRenderTarget(this.bufferTextures[i]);
                 renderer.render(this.bufferScene, this.orthographicCameras[i]);
@@ -233,6 +217,7 @@ class ViewArea extends Component {
         const geometry = new THREE.PlaneBufferGeometry(16000, 16000, 256, 256);
         geometry.computeFaceNormals();
         geometry.computeVertexNormals();
+        geometry.computeBoundingBox();
 
         const textureLoader = new THREE.TextureLoader();
 
@@ -308,7 +293,8 @@ class ViewArea extends Component {
 
 
 
-    calculateMaxSplitDistances(camera) {
+    calculateMaxSplitDistances() {
+        this.calculateNearAndFar();
         const near = this.near;
         const far = this.far;
         this.maxSplitDistances[0] = near;
@@ -384,7 +370,7 @@ class ViewArea extends Component {
     }
 
     createOrthographicCameras() {
-        this.calculateMaxSplitDistances(this.camera);
+        this.calculateMaxSplitDistances();
 
         for (let i = 0; i < this.splitCount; ++i) {
             let currentCamera = new THREE.PerspectiveCamera(this.camera.fov, this.camera.aspect, this.maxSplitDistances[i], this.maxSplitDistances[i + 1]);
@@ -420,60 +406,6 @@ class ViewArea extends Component {
         }
     }
 
-    createTerrainBorderPlanes() {
-        const heightMapImage = new Image();
-        heightMapImage.src = heightMapTexture;
-        const ref = this;
-        heightMapImage.onload = function (img) {
-            // TODO why is the value lower than it should be?
-            // image is stored in RGBA -> every ith element for which (i % 4 == 0) is for R
-            // but heightMax is 146
-            // and you can see the resulting plane intersecting the terrain, which should not happen
-            // which means that the value in vertex shader is higher than the value i get here
-            // how is this possible?
-
-            /*const canvas = document.createElement("canvas");
-            const context = canvas.getContext('2d');
-            context.drawImage(heightMapImage, 0, 0);
-            const info = context.getImageData(0, 0, heightMapImage.width, heightMapImage.height);
-            const heightInfo = info.data.filter(function (value, index) {
-                return index % 4 === 0;
-            });
-            let heightMax = Number.NEGATIVE_INFINITY;
-            heightInfo.forEach(elem => {
-                heightMax = Math.max(heightMax, elem);
-            });*/
-
-
-            // TODO refactor
-            const terrain = ref.terrain;
-            const terrainGeometry = terrain.geometry;
-            ref.lowerPlane = new THREE.Mesh(new THREE.PlaneGeometry(terrainGeometry.parameters.width, terrainGeometry.parameters.height), new THREE.MeshBasicMaterial({
-                color: "green",
-                wireframe: true
-            }));
-            ref.upperPlane = new THREE.Mesh(new THREE.PlaneGeometry(terrainGeometry.parameters.width, terrainGeometry.parameters.height), new THREE.MeshBasicMaterial({
-                color: "green",
-                wireframe: true
-            }));
-
-            let debugGeometry = new THREE.Geometry().fromBufferGeometry(terrainGeometry);
-            debugGeometry.computeFaceNormals();
-            debugGeometry.computeFlatVertexNormals();
-            debugGeometry.computeMorphNormals();
-            debugGeometry.computeVertexNormals();
-            console.log(debugGeometry);
-
-            ref.lowerPlane.rotation.set(terrain.rotation.x, terrain.rotation.y, terrain.rotation.z);
-            ref.lowerPlane.position.set(terrain.position.x, terrain.position.y, terrain.position.z);
-            ref.lowerPlane.position.y -= ref.terrainBumpScale;
-            ref.upperPlane.rotation.set(terrain.rotation.x, terrain.rotation.y, terrain.rotation.z);
-            ref.upperPlane.position.set(terrain.position.x, terrain.position.y, terrain.position.z);
-            ref.upperPlane.position.y += ref.terrainBumpScale;
-            ref.calculateNearAndFar()
-        };
-    }
-
     createFrustumFromCamera(camera) {
         return new THREE.Frustum().setFromMatrix(
             new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
@@ -487,117 +419,67 @@ class ViewArea extends Component {
         }
     }
 
-    findPlaneIntersection(mathPlane, meshPlane) {
-        let a = new THREE.Vector3();
-        let b = new THREE.Vector3();
-        let c = new THREE.Vector3();
-
+    findPointsIntersection(mathPlane, points) {
         let intersectionPoints = [];
-        let obj = this;
-        meshPlane.geometry.faces.forEach(function (face) {
-            meshPlane.localToWorld(a.copy(meshPlane.geometry.vertices[face.a]));
-            meshPlane.localToWorld(b.copy(meshPlane.geometry.vertices[face.b]));
-            meshPlane.localToWorld(c.copy(meshPlane.geometry.vertices[face.c]));
-            let lineAB = new THREE.Line3(a, b);
-            let lineBC = new THREE.Line3(b, c);
-            let lineCA = new THREE.Line3(c, a);
-            obj.setPointOfIntersection(mathPlane, lineAB, intersectionPoints);
-            obj.setPointOfIntersection(mathPlane, lineBC, intersectionPoints);
-            obj.setPointOfIntersection(mathPlane, lineCA, intersectionPoints);
-        });
+        let lineAB = new THREE.Line3(points.a, points.b);
+        let lineBC = new THREE.Line3(points.b, points.c);
+        let lineCA = new THREE.Line3(points.c, points.a);
+        this.setPointOfIntersection(mathPlane, lineAB, intersectionPoints);
+        this.setPointOfIntersection(mathPlane, lineBC, intersectionPoints);
+        this.setPointOfIntersection(mathPlane, lineCA, intersectionPoints);
         return intersectionPoints;
     }
 
-    findFrustumAndPlaneIntersections(frustum, plane) {
+    findFrustumAndPointsIntersections(frustum, points) {
         let intersectionPoints = [];
-        frustum.planes.forEach(fp => intersectionPoints = intersectionPoints.concat(this.findPlaneIntersection(fp, plane)));
+        frustum.planes.forEach(fp => intersectionPoints = intersectionPoints.concat(this.findPointsIntersection(fp, points)));
         return intersectionPoints;
-    }
-
-    // order:
-    // 1 ------ 2
-    // |        |
-    // |        |
-    // 3 ------ 4
-    // first upper plane, then lower plane
-    // vertices[0] -> upper 1
-    // vertices[7] -> lower 4
-    getBoundingBoxSidePlanes(vertices) {
-        return [
-            new THREE.Plane().setFromCoplanarPoints(vertices.upper[0], vertices.upper[2], vertices.lower[0]),
-            new THREE.Plane().setFromCoplanarPoints(vertices.upper[2], vertices.upper[3], vertices.lower[2]),
-            new THREE.Plane().setFromCoplanarPoints(vertices.upper[3], vertices.upper[1], vertices.lower[3]),
-            new THREE.Plane().setFromCoplanarPoints(vertices.upper[1], vertices.upper[0], vertices.lower[1]),
-        ];
     }
 
     calculateNearAndFar() {
-        this.scene.add(this.lowerPlane);
-        this.scene.add(this.upperPlane);
-
         let cameraFrustum = this.createFrustumFromCamera(this.camera);
-        this.lowerPlane.updateMatrixWorld(true);
-        this.upperPlane.updateMatrixWorld(true);
-
-        let lowerPlaneIntersectionPoints = this.findFrustumAndPlaneIntersections(cameraFrustum, this.lowerPlane);
-        let upperPlaneIntersectionPoints = this.findFrustumAndPlaneIntersections(cameraFrustum, this.upperPlane);
 
         const canvas = this.canvasRef.current;
-        const vectorTextureBoundingBoxCoordinates = {
-            upper: [
-                new THREE.Vector3(canvas.width /  2, this.camera.position.y,     canvas.height /  2),
-                new THREE.Vector3(canvas.width / -2, this.camera.position.y,     canvas.height /  2),
-                new THREE.Vector3(canvas.width / -2, this.camera.position.y,     canvas.height / -2),
-                new THREE.Vector3(canvas.width /  2, this.camera.position.y,     canvas.height / -2),
-            ],
-            lower: [
-                new THREE.Vector3(canvas.width /  2, this.lowerPlane.position.y, canvas.height /  2),
-                new THREE.Vector3(canvas.width / -2, this.lowerPlane.position.y, canvas.height /  2),
-                new THREE.Vector3(canvas.width / -2, this.lowerPlane.position.y, canvas.height / -2),
-                new THREE.Vector3(canvas.width /  2, this.lowerPlane.position.y, canvas.height / -2),
-            ]
-        };
-        let planes = this.getBoundingBoxSidePlanes(vectorTextureBoundingBoxCoordinates);
+        let fbb = new THREE.Box3().setFromObject(this.terrain);
+        fbb.min.y -= this.terrainBumpScale;
+        fbb.max.y += this.terrainBumpScale;
+        let boxGeometry = new THREE.BoxGeometry(canvas.width, this.camera.position.y - fbb.min.y, canvas.height);
+        let boxMesh = new THREE.Mesh(boxGeometry, new THREE.MeshBasicMaterial());
+        let boxMeshY = (this.camera.position.y + fbb.min.y) / 2;
+        boxMesh.position.set(this.terrain.position.x, boxMeshY, this.terrain.position.z);
+        let tbb = new THREE.Box3().setFromObject(boxMesh);
+        fbb.intersect(tbb);
 
-        let texturesBoxIntersectionPoints = [];
-        planes.forEach(plane => {
-            for (let i = 1; i < upperPlaneIntersectionPoints.length; i++) {
-                const line = new THREE.Line3(upperPlaneIntersectionPoints[i - 1], upperPlaneIntersectionPoints[i]);
-                this.setPointOfIntersection(plane, line, texturesBoxIntersectionPoints);
-            }
+        let upperPlanePoints = {
+            a: new THREE.Vector3(fbb.min.x, fbb.max.y, fbb.max.z),
+            b: new THREE.Vector3(fbb.min.x, fbb.max.y, fbb.min.z),
+            c: fbb.max
+        };
+        let lowerPlanePoints = {
+            a: fbb.min,
+            b: new THREE.Vector3(fbb.max.x, fbb.min.y, fbb.min.z),
+            c: new THREE.Vector3(fbb.max.x, fbb.min.y, fbb.max.z)
+        };
+
+        let upperIntersectionPoints = this.findFrustumAndPointsIntersections(cameraFrustum, upperPlanePoints);
+        let lowerIntersectionPoints = this.findFrustumAndPointsIntersections(cameraFrustum, lowerPlanePoints);
+
+
+        let currentMin = Number.POSITIVE_INFINITY;
+        let currentMax = Number.NEGATIVE_INFINITY;
+        upperIntersectionPoints.forEach(it => {
+            let point = it;
+            currentMin = Math.min(currentMin, point.z);
+            currentMax = Math.max(currentMax, point.z);
+        });
+        lowerIntersectionPoints.forEach(it => {
+            let point = it;
+            currentMin = Math.min(currentMin, point.z);
+            currentMax = Math.max(currentMax, point.z);
         });
 
-        let intersectionPointsInViewSpace = texturesBoxIntersectionPoints.map(it => it.applyMatrix4(this.camera.matrixWorldInverse))
-
-        /*this.near = Math.max(this.camera.near, Math.min(...intersectionPointsInViewSpace.map(it => it.z)));
-        this.far = Math.min(this.camera.far, Math.max(...intersectionPointsInViewSpace.map(it => it.z)));
-        console.log(this.near, this.far);*/
-
-
-        // debug display
-        let textureBoxAndBoundingPlanesIntersectionsGeometry = new THREE.Geometry();
-        texturesBoxIntersectionPoints.forEach(it => textureBoxAndBoundingPlanesIntersectionsGeometry.vertices.push(it));
-        let frustumAndBoundingPlanesIntersectionGeometry = new THREE.Geometry();
-        lowerPlaneIntersectionPoints.forEach(it => frustumAndBoundingPlanesIntersectionGeometry.vertices.push(it));
-        upperPlaneIntersectionPoints.forEach(it => frustumAndBoundingPlanesIntersectionGeometry.vertices.push(it));
-        let points1 = new THREE.Points(textureBoxAndBoundingPlanesIntersectionsGeometry, new THREE.PointsMaterial({
-            size: 100,
-            color: 0xffff00
-        }));
-        this.scene.add(points1);
-
-        let points2 = new THREE.Points(frustumAndBoundingPlanesIntersectionGeometry, new THREE.PointsMaterial({
-            size: 100,
-            color: 0x34eba1
-        }));
-        this.scene.add(points2);
-
-        let boxGeometry = new THREE.BoxGeometry(window.innerWidth, 10000, window.innerHeight);
-        let boxMesh = new THREE.Mesh(boxGeometry, new THREE.MeshBasicMaterial({
-            wireframe: true,
-            color: new THREE.Color("blue")
-        }));
-        this.scene.add(boxMesh);
+        this.near = Math.max(this.camera.near, currentMin);
+        this.far = Math.min(this.camera.far, currentMax);
     }
 
 }
