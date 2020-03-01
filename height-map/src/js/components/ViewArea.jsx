@@ -5,6 +5,9 @@ import * as dat from 'dat.gui'
 import vxShader from '../../shaders/main.vert';
 import fragShader from '../../shaders/main.frag';
 
+import terrainZVxShader from '../../shaders/terrain_z_coord.vert'
+import terrainZFragShader from '../../shaders/terrain_z_coord.frag'
+
 import sandTexture from '../../textures/sand-512.jpg';
 import rockTexture from '../../textures/rock-512.jpg';
 import snowTexture from '../../textures/snow-512.jpg';
@@ -13,6 +16,11 @@ import heightMapTexture from '../../textures/height_map.png';
 import meadowTexture from '../../textures/grass-512.jpg';
 
 import {connect} from 'react-redux'
+
+import './ZCoordinateEffectsComposer';
+import {setUpZCoordEffectsComposer} from "./ZCoordinateEffectsComposer";
+import './CSMFrustumSplit'
+import {calculateMaxSplitDistances, getOrthographicCameraForPerspectiveCamera} from "./CSMFrustumSplit";
 
 // import {log} from 'log';
 
@@ -29,9 +37,6 @@ class ViewArea extends Component {
 
         this.splitCount = 8;
         this.splitLambda = 1.0;
-        // TODO
-        this.near = 0.1;
-        this.far = 10000;
         this.maxSplitDistances = [];
 
         this.orthographicCameras = [];
@@ -40,6 +45,9 @@ class ViewArea extends Component {
         this.displayBorders = false;
         this.displayTextures = true;
 
+        // for zMin - zMax calculations
+        this.zScene = new THREE.Scene();
+        this.zScene.background = new THREE.Color('green');
 
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color('lightblue');
@@ -53,7 +61,6 @@ class ViewArea extends Component {
         this.createLights();
 
         this.shaderMaterial = new THREE.ShaderMaterial({uniforms: {}, vertexShader: vxShader, fragmentShader: fragShader});
-
         this.terrain = this.createMeshes();
 
         this.debugScene = new THREE.Scene();
@@ -112,16 +119,21 @@ class ViewArea extends Component {
             return;
         }
 
-        this.camera = this.createCamera(canvas, 1000, 1000, 200);
+        this.camera = this.createCamera(canvas, 4000, 2500, 800);
         this.camera.name = "camera";
         this.controls = this.createControls(canvas, this.camera);
 
         this.createDebugMeshes();
 
+
         const renderer = this.createRenderer(canvas);
 
-        const renderLoopTick = () => {
+        let then = 0;
+        const renderLoopTick = (now) => {
             this.debugCount++;
+            now *= 0.001;
+            const deltaTime = now - then;
+            then = now;
 
             this.createOrthographicCameras();
             this.createTextureMatrices();
@@ -133,8 +145,18 @@ class ViewArea extends Component {
                 renderer.setRenderTarget(this.bufferTextures[i]);
                 renderer.render(this.bufferScene, this.orthographicCameras[i]);
             }
+
+            let composer = setUpZCoordEffectsComposer(renderer, canvas.width, canvas.height, this.zScene, this.camera);
+            composer.render(deltaTime);
+            let pixels = new Float32Array(4);
+            composer.renderer.readRenderTargetPixels(composer.readBuffer, 0, 0, 1, 1, pixels);
+            console.log(pixels);
+
+            renderer.setViewport(0, 0, canvas.width, canvas.height);
             renderer.setRenderTarget(null);
             renderer.render(this.scene, this.camera);
+
+
             if (this.displayTextures) {
                 this.debugScene.add(this.camera);
                 renderer.autoClear = false;
@@ -264,7 +286,16 @@ class ViewArea extends Component {
         const plane = new THREE.Mesh(geometry, this.shaderMaterial);
         plane.position.set(0, -150, 0);
         plane.rotation.x = -Math.PI / 2;
+
+        const renderPlane = plane.clone();
+        renderPlane.material = new THREE.ShaderMaterial({
+            vertexShader: terrainZVxShader, fragmentShader: terrainZFragShader, uniforms: {
+                bumpTexture: {type: "t", value: bumpTexture},
+                bumpScale: {type: "f", value: this.terrainBumpScale}
+            }
+        });
         this.scene.add(plane);
+        this.zScene.add(renderPlane);
 
         return plane;
     }
@@ -291,93 +322,15 @@ class ViewArea extends Component {
         }
     }
 
-
-
-    calculateMaxSplitDistances() {
-        this.calculateNearAndFar();
-        const near = this.near;
-        const far = this.far;
-        this.maxSplitDistances[0] = near;
-
-        for (let i = 1; i < this.splitCount + 1; i++) {
-            let f = i / (this.splitCount + 1);
-            let l = near * Math.pow(far / near, f);
-            let u = near + (far - near) * f;
-            this.maxSplitDistances[i] = l * this.splitLambda + u * (1 - this.splitLambda);
-        }
-    }
-
-    calculateCameraFrustumCorners(camera) {
-        let ndc_corners = [
-            [-1,-1,-1], [1,-1,-1], [-1,1,-1], [1,1,-1],
-            [-1,-1, 1], [1,-1, 1], [-1,1, 1], [1,1, 1]];
-
-        let world_corners = [];
-        for (let i = 0; i < ndc_corners.length; ++i) {
-            let ndc_v = new THREE.Vector3(...ndc_corners[i]);
-            let v_cam = ndc_v.unproject(camera);
-            // let v_cam_4 = new THREE.Vector4(v_cam.x, v_cam.y, v_cam.z, 1);
-            world_corners.push(v_cam);
-        }
-        return world_corners.map(function (p) {
-            return new THREE.Vector3(p.x, p.y, p.z);
-        });
-    }
-
-    calculateBoundingBox(points) {
-        let minX = Number.POSITIVE_INFINITY;
-        let maxX = Number.NEGATIVE_INFINITY;
-        let minY = Number.POSITIVE_INFINITY;
-        let maxY = Number.NEGATIVE_INFINITY;
-        let minZ = Number.POSITIVE_INFINITY;
-        let maxZ = Number.NEGATIVE_INFINITY;
-        for (const point of points) {
-            minX = Math.min(point.x, minX);
-            maxX = Math.max(point.x, maxX);
-            minY = Math.min(point.y, minY);
-            maxY = Math.max(point.y, maxY);
-            minZ = Math.min(point.z, minZ);
-            maxZ = Math.max(point.z, maxZ);
-        }
-
-        return {minX: minX, minY: minY, minZ: minZ, maxX: maxX, maxY: maxY, maxZ: maxZ};
-    }
-
-    getOrthographicCameraForPerspectiveCamera(camera) {
-        const frustumCorners = this.calculateCameraFrustumCorners(camera);
-
-        // format: minX, minY, minZ, maxX, maxY, maxZ
-        const boundingBox = this.calculateBoundingBox(frustumCorners);
-
-        let rangeX = boundingBox.maxX - boundingBox.minX;
-        let centerX = (boundingBox.maxX + boundingBox.minX) / 2;
-        let rangeY = boundingBox.maxZ - boundingBox.minZ;
-        let centerY = (boundingBox.maxZ + boundingBox.minZ) / 2;
-
-        let cam = new THREE.OrthographicCamera(
-            -rangeX / 2,
-            rangeX / 2,
-            rangeY / 2,
-            -rangeY / 2,
-            -1000,
-            2000
-        );
-        cam.position.set(centerX, 500, centerY);
-        cam.rotation.set(-Math.PI / 2, 0, 0);
-        cam.updateMatrixWorld( true );
-
-        return cam;
-    }
-
     createOrthographicCameras() {
-        this.calculateMaxSplitDistances();
+        this.maxSplitDistances = calculateMaxSplitDistances(this.maxSplitDistances, this.splitCount, this.splitLambda, this.near, this.far);
 
         for (let i = 0; i < this.splitCount; ++i) {
             let currentCamera = new THREE.PerspectiveCamera(this.camera.fov, this.camera.aspect, this.maxSplitDistances[i], this.maxSplitDistances[i + 1]);
             currentCamera.position.set(this.camera.position.x, this.camera.position.y, this.camera.position.z);
             currentCamera.rotation.set(this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z);
             currentCamera.updateMatrixWorld( true );
-            this.orthographicCameras[i] = this.getOrthographicCameraForPerspectiveCamera(currentCamera);
+            this.orthographicCameras[i] = getOrthographicCameraForPerspectiveCamera(currentCamera);
         }
     }
 
@@ -385,9 +338,9 @@ class ViewArea extends Component {
         let matrices = new Array(this.maxSplitCount).fill(new THREE.Matrix4());
         for (let i = 0; i < this.orthographicCameras.length; ++i) {
 
-          let m = this.orthographicCameras[i].projectionMatrix.clone();
-          m.multiply(this.orthographicCameras[i].matrixWorldInverse);
-          matrices[i] = m;
+            let m = this.orthographicCameras[i].projectionMatrix.clone();
+            m.multiply(this.orthographicCameras[i].matrixWorldInverse);
+            matrices[i] = m;
         }
         this.shaderMaterial.uniforms['textureMatrices'].value = matrices;
     }
@@ -405,83 +358,6 @@ class ViewArea extends Component {
             textureMesh.position.set(-550 + (textureMesh.geometry.parameters.width + 50) * i, -300, -1000);
         }
     }
-
-    createFrustumFromCamera(camera) {
-        return new THREE.Frustum().setFromMatrix(
-            new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
-        );
-    }
-
-    setPointOfIntersection(plane, line, intersectionPoints) {
-        let pointOfIntersection = plane.intersectLine(line);
-        if (pointOfIntersection) {
-            intersectionPoints.push(pointOfIntersection)
-        }
-    }
-
-    findPointsIntersection(mathPlane, points) {
-        let intersectionPoints = [];
-        let lineAB = new THREE.Line3(points.a, points.b);
-        let lineBC = new THREE.Line3(points.b, points.c);
-        let lineCA = new THREE.Line3(points.c, points.a);
-        this.setPointOfIntersection(mathPlane, lineAB, intersectionPoints);
-        this.setPointOfIntersection(mathPlane, lineBC, intersectionPoints);
-        this.setPointOfIntersection(mathPlane, lineCA, intersectionPoints);
-        return intersectionPoints;
-    }
-
-    findFrustumAndPointsIntersections(frustum, points) {
-        let intersectionPoints = [];
-        frustum.planes.forEach(fp => intersectionPoints = intersectionPoints.concat(this.findPointsIntersection(fp, points)));
-        return intersectionPoints;
-    }
-
-    calculateNearAndFar() {
-        let cameraFrustum = this.createFrustumFromCamera(this.camera);
-
-        const canvas = this.canvasRef.current;
-        let fbb = new THREE.Box3().setFromObject(this.terrain);
-        fbb.min.y -= this.terrainBumpScale;
-        fbb.max.y += this.terrainBumpScale;
-        let boxGeometry = new THREE.BoxGeometry(canvas.width, this.camera.position.y - fbb.min.y, canvas.height);
-        let boxMesh = new THREE.Mesh(boxGeometry, new THREE.MeshBasicMaterial());
-        let boxMeshY = (this.camera.position.y + fbb.min.y) / 2;
-        boxMesh.position.set(this.terrain.position.x, boxMeshY, this.terrain.position.z);
-        let tbb = new THREE.Box3().setFromObject(boxMesh);
-        fbb.intersect(tbb);
-
-        let upperPlanePoints = {
-            a: new THREE.Vector3(fbb.min.x, fbb.max.y, fbb.max.z),
-            b: new THREE.Vector3(fbb.min.x, fbb.max.y, fbb.min.z),
-            c: fbb.max
-        };
-        let lowerPlanePoints = {
-            a: fbb.min,
-            b: new THREE.Vector3(fbb.max.x, fbb.min.y, fbb.min.z),
-            c: new THREE.Vector3(fbb.max.x, fbb.min.y, fbb.max.z)
-        };
-
-        let upperIntersectionPoints = this.findFrustumAndPointsIntersections(cameraFrustum, upperPlanePoints);
-        let lowerIntersectionPoints = this.findFrustumAndPointsIntersections(cameraFrustum, lowerPlanePoints);
-
-
-        let currentMin = Number.POSITIVE_INFINITY;
-        let currentMax = Number.NEGATIVE_INFINITY;
-        upperIntersectionPoints.forEach(it => {
-            let point = it;
-            currentMin = Math.min(currentMin, point.z);
-            currentMax = Math.max(currentMax, point.z);
-        });
-        lowerIntersectionPoints.forEach(it => {
-            let point = it;
-            currentMin = Math.min(currentMin, point.z);
-            currentMax = Math.max(currentMax, point.z);
-        });
-
-        this.near = Math.max(this.camera.near, currentMin);
-        this.far = Math.min(this.camera.far, currentMax);
-    }
-
 }
 
 const mapStateToProps = (state /*, ownProps*/) => {
@@ -495,3 +371,7 @@ export default connect(
     mapStateToProps,
     mapDispatchToProps
 )(ViewArea)
+
+
+
+
