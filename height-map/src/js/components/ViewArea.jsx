@@ -15,6 +15,8 @@ import waterTexture from '../../textures/water512.jpg';
 import heightMapTexture from '../../textures/height_map.png';
 import meadowTexture from '../../textures/grass-512.jpg';
 
+import testTexture from '../../textures/test.png';
+
 import {connect} from 'react-redux'
 
 import './ZCoordinateEffectsComposer';
@@ -47,7 +49,6 @@ class ViewArea extends Component {
 
         // for zMin - zMax calculations
         this.zScene = new THREE.Scene();
-        this.zScene.background = new THREE.Color('green');
 
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color('lightblue');
@@ -129,6 +130,16 @@ class ViewArea extends Component {
         const renderer = this.createRenderer(canvas);
 
         let then = 0;
+
+        /*const spriteMap = new THREE.TextureLoader().load(testTexture, (texture) => {
+            const spriteMaterial = new THREE.SpriteMaterial({map: spriteMap});
+            const sprite = new THREE.Sprite(spriteMaterial);
+            this.zScene.add( sprite );
+        });*/
+
+        /*const cam = new THREE.PerspectiveCamera(45, canvas.width / canvas.height, 0.1, 1000);
+        console.log(canvas.width, canvas.height);
+        cam.position.set(0, 0, 0.100001);*/
         const renderLoopTick = (now) => {
             this.debugCount++;
             now *= 0.001;
@@ -147,6 +158,7 @@ class ViewArea extends Component {
             }
 
             let composer = setUpZCoordEffectsComposer(renderer, canvas.width, canvas.height, this.zScene, this.camera);
+            composer.renderer.setViewport(0, 0, Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
             composer.render(deltaTime);
             let pixels = new Float32Array(4);
             composer.renderer.readRenderTargetPixels(composer.readBuffer, 0, 0, 1, 1, pixels);

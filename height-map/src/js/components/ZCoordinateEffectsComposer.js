@@ -1,37 +1,32 @@
 import * as THREE from "three-full";
 import terrainPingPongVxShader from "../../shaders/terrain_ping_pong.vert";
 import terrainPingPongFragShader from "../../shaders/terrain_ping_pong.frag";
+import {Vector4} from "three-full";
 
-export class ZCoordEffectsComposer extends THREE.EffectComposer {
-    swapBuffers() {
-        // for debug
-        let pixels = new Float32Array(32);
-        this.renderer.readRenderTargetPixels(this.readBuffer, 0, 0, 4, 1, pixels);
-        this.renderer.readRenderTargetPixels(this.writeBuffer, 0, 0, 4, 1, pixels);
+class ShaderPassWithViewport extends THREE.ShaderPass {
+    render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
+        let v = new Vector4();
+        renderer.getCurrentViewport(v);
+        console.log(v);
 
-        if (this.currentWidth === -1 || this.currentHeight === -1) {
+        if (this.width === -1 || this.height === -1) {
             let v = new THREE.Vector4();
-            this.renderer.getCurrentViewport(v);
-            this.currentWidth = v.z;
-            this.currentHeight = v.w;
+            renderer.getCurrentViewport(v);
+            this.width = v.z;
+            this.height = v.w;
         }
 
-        let newWidth = Math.ceil(this.currentWidth / 2);
-        let newHeight = Math.ceil(this.currentHeight / 2);
-        this.currentHeight = newHeight;
-        this.currentWidth = newWidth;
-        this.renderer.setViewport(0, 0, newWidth, newHeight);
-        super.swapBuffers();
+        renderer.setViewport(0, 0, this.width, this.height);
+
+        super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
     }
 }
 
-ZCoordEffectsComposer.prototype.currentHeight = -1;
-ZCoordEffectsComposer.prototype.currentWidth = -1;
+ShaderPassWithViewport.prototype.width = -1;
+ShaderPassWithViewport.prototype.height = -1;
 
 export function setUpZCoordEffectsComposer(renderer, width, height, scene, camera) {
-    let composer = new ZCoordEffectsComposer(renderer, new THREE.WebGLRenderTarget(width, height, {type: THREE.FloatType}));
-    composer.currentHeight = height;
-    composer.currentWidth = width;
+    let composer = new THREE.EffectComposer(renderer, new THREE.WebGLRenderTarget(width, height, {type: THREE.FloatType}));
     composer.renderToScreen = false;
     composer.addPass(new THREE.RenderPass(scene, camera));
     let n = Math.ceil(Math.max(Math.log2(width), Math.log2(height)));
@@ -47,7 +42,10 @@ export function setUpZCoordEffectsComposer(renderer, width, height, scene, camer
             vertexShader: terrainPingPongVxShader,
             fragmentShader: terrainPingPongFragShader
         };
-        composer.addPass(new THREE.ShaderPass(shader));
+        const pass = new ShaderPassWithViewport(shader);
+        pass.width = currentWidth;
+        pass.height = currentHeight;
+        composer.addPass(pass);
     }
     return composer;
 }
