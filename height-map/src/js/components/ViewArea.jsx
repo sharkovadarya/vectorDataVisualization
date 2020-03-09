@@ -248,7 +248,7 @@ class ViewArea extends Component {
     }
 
     createMeshes() {
-        const geometry = new THREE.PlaneBufferGeometry(16000, 16000, 256, 256);
+        const geometry = new THREE.PlaneBufferGeometry(4000, 4000, 256, 256);
         geometry.computeFaceNormals();
         geometry.computeVertexNormals();
         geometry.computeBoundingBox();

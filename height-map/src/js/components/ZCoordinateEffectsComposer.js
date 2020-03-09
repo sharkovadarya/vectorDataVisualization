@@ -1,13 +1,11 @@
 import * as THREE from "three-full";
 import terrainPingPongVxShader from "../../shaders/terrain_ping_pong.vert";
 import terrainPingPongFragShader from "../../shaders/terrain_ping_pong.frag";
-import {Vector4} from "three-full";
 
 class ShaderPassWithViewport extends THREE.ShaderPass {
     render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
-        let v = new Vector4();
-        renderer.getCurrentViewport(v);
-        console.log(v);
+        let pixels = new Float32Array(4 * 8 * 4);
+        renderer.readRenderTargetPixels(readBuffer, 0, 0, 8, 4, pixels);
 
         if (this.width === -1 || this.height === -1) {
             let v = new THREE.Vector4();
