@@ -128,18 +128,10 @@ class ViewArea extends Component {
 
 
         const renderer = this.createRenderer(canvas);
+        const clearColor = renderer.getClearColor();
+        const clearAlpha = renderer.getClearAlpha();
 
         let then = 0;
-
-        /*const spriteMap = new THREE.TextureLoader().load(testTexture, (texture) => {
-            const spriteMaterial = new THREE.SpriteMaterial({map: spriteMap});
-            const sprite = new THREE.Sprite(spriteMaterial);
-            this.zScene.add( sprite );
-        });*/
-
-        /*const cam = new THREE.PerspectiveCamera(45, canvas.width / canvas.height, 0.1, 1000);
-        console.log(canvas.width, canvas.height);
-        cam.position.set(0, 0, 0.100001);*/
         const renderLoopTick = (now) => {
             this.debugCount++;
             now *= 0.001;
@@ -165,6 +157,8 @@ class ViewArea extends Component {
             console.log(pixels);
 
             renderer.setViewport(0, 0, canvas.width, canvas.height);
+            renderer.setClearColor(clearColor, clearAlpha);
+
             renderer.setRenderTarget(null);
             renderer.render(this.scene, this.camera);
 

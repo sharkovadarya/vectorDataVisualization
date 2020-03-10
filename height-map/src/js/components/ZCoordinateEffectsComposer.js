@@ -4,8 +4,8 @@ import terrainPingPongFragShader from "../../shaders/terrain_ping_pong.frag";
 
 class ShaderPassWithViewport extends THREE.ShaderPass {
     render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
-        let pixels = new Float32Array(4 * 8 * 4);
-        renderer.readRenderTargetPixels(readBuffer, 0, 0, 8, 4, pixels);
+        /*let pixels = new Float32Array(4);
+        renderer.readRenderTargetPixels(readBuffer, 0, 0, 1, 1, pixels);*/
 
         if (this.width === -1 || this.height === -1) {
             let v = new THREE.Vector4();
@@ -24,6 +24,7 @@ ShaderPassWithViewport.prototype.width = -1;
 ShaderPassWithViewport.prototype.height = -1;
 
 export function setUpZCoordEffectsComposer(renderer, width, height, scene, camera) {
+    renderer.setClearColor(new THREE.Color(1e9, 1e-9, 0), 1);
     let composer = new THREE.EffectComposer(renderer, new THREE.WebGLRenderTarget(width, height, {type: THREE.FloatType}));
     composer.renderToScreen = false;
     composer.addPass(new THREE.RenderPass(scene, camera));
