@@ -15,8 +15,6 @@ import waterTexture from '../../textures/water512.jpg';
 import heightMapTexture from '../../textures/height_map.png';
 import meadowTexture from '../../textures/grass-512.jpg';
 
-import testTexture from '../../textures/test.png';
-
 import {connect} from 'react-redux'
 
 import './ZCoordinateEffectsComposer';
@@ -130,6 +128,7 @@ class ViewArea extends Component {
         const renderer = this.createRenderer(canvas);
         const clearColor = renderer.getClearColor();
         const clearAlpha = renderer.getClearAlpha();
+        let composer = setUpZCoordEffectsComposer(renderer, canvas.width, canvas.height, this.zScene, this.camera);
 
         let then = 0;
         const renderLoopTick = (now) => {
@@ -137,6 +136,19 @@ class ViewArea extends Component {
             now *= 0.001;
             const deltaTime = now - then;
             then = now;
+
+            // set composer renderer parameters
+            composer.renderer.setClearColor(new THREE.Color(1e9, -1e9, 0), 1);
+            composer.renderer.setViewport(0, 0, Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
+
+            composer.render(deltaTime);
+            let pixels = new Float32Array(4);
+            composer.renderer.readRenderTargetPixels(composer.readBuffer, 0, 0, 1, 1, pixels);
+            this.calculateNearAndFar(pixels[0], pixels[1], this.camera);
+
+            // restore default renderer parameters
+            renderer.setViewport(0, 0, canvas.width, canvas.height);
+            renderer.setClearColor(clearColor, clearAlpha);
 
             this.createOrthographicCameras();
             this.createTextureMatrices();
@@ -148,16 +160,6 @@ class ViewArea extends Component {
                 renderer.setRenderTarget(this.bufferTextures[i]);
                 renderer.render(this.bufferScene, this.orthographicCameras[i]);
             }
-
-            let composer = setUpZCoordEffectsComposer(renderer, canvas.width, canvas.height, this.zScene, this.camera);
-            composer.renderer.setViewport(0, 0, Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
-            composer.render(deltaTime);
-            let pixels = new Float32Array(4);
-            composer.renderer.readRenderTargetPixels(composer.readBuffer, 0, 0, 1, 1, pixels);
-            console.log(pixels);
-
-            renderer.setViewport(0, 0, canvas.width, canvas.height);
-            renderer.setClearColor(clearColor, clearAlpha);
 
             renderer.setRenderTarget(null);
             renderer.render(this.scene, this.camera);
@@ -363,6 +365,11 @@ class ViewArea extends Component {
             this.camera.add(textureMesh);
             textureMesh.position.set(-550 + (textureMesh.geometry.parameters.width + 50) * i, -300, -1000);
         }
+    }
+
+    calculateNearAndFar(zMinValue, zMaxValue, camera) {
+        this.near = Math.max(camera.near, -zMaxValue);
+        this.far = Math.min(camera.far, -zMinValue);
     }
 }
 
