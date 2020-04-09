@@ -82,6 +82,7 @@ class ViewArea extends Component {
             this.splitLambda = 1.0;
             this.displayBorders = true;
             this.displayTextures = true;
+            this.stable = true;
         };
 
         this.debugCount = 0;
@@ -95,6 +96,7 @@ class ViewArea extends Component {
             gui.add(parameters, 'splitLambda').min(0.0).max(1.0).step(0.001);
             gui.add(parameters, 'displayBorders');
             gui.add(parameters, 'displayTextures');
+            gui.add(parameters, 'stable');
 
             let update = function () {
                 requestAnimationFrame(update);
@@ -116,6 +118,7 @@ class ViewArea extends Component {
                 refs.splitLambda = parameters.splitLambda;
                 refs.displayBorders = parameters.displayBorders;
                 refs.displayTextures = parameters.displayTextures;
+                refs.stable = parameters.stable;
             };
             update();
         };
@@ -159,7 +162,7 @@ class ViewArea extends Component {
             renderer.setViewport(0, 0, canvas.width, canvas.height);
             renderer.setClearColor(clearColor, clearAlpha);
 
-            this.createOrthographicCameras();
+            this.createOrthographicCameras(this.stable);
             this.createTextureMatrices();
 
             this.shaderMaterial.uniforms.displayBorders.value = this.displayBorders ? 1 : 0;
@@ -393,15 +396,15 @@ class ViewArea extends Component {
         this.bufferScene.add(bigCircleMesh);
     }
 
-    createOrthographicCameras() {
+    createOrthographicCameras(stable = false) {
         this.maxSplitDistances = calculateMaxSplitDistances(this.maxSplitDistances, this.splitCount, this.splitLambda, this.near, this.far);
 
         for (let i = 0; i < this.splitCount; ++i) {
             let currentCamera = new THREE.PerspectiveCamera(this.camera.fov, this.camera.aspect, this.maxSplitDistances[i], this.maxSplitDistances[i + 1]);
             currentCamera.position.set(this.camera.position.x, this.camera.position.y, this.camera.position.z);
             currentCamera.rotation.set(this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z);
-            currentCamera.updateMatrixWorld( true );
-            this.orthographicCameras[i] = getOrthographicCameraForPerspectiveCamera(currentCamera);
+            currentCamera.updateMatrixWorld(true);
+            this.orthographicCameras[i] = getOrthographicCameraForPerspectiveCamera(currentCamera, stable);
         }
     }
 

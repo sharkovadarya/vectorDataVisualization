@@ -49,7 +49,7 @@ function calculateBoundingBox(points) {
     return {minX: minX, minY: minY, minZ: minZ, maxX: maxX, maxY: maxY, maxZ: maxZ};
 }
 
-export function getOrthographicCameraForPerspectiveCamera(camera) {
+export function getOrthographicCameraForPerspectiveCamera(camera, stable = false, textureSize = 2048) {
     const frustumCorners = calculateCameraFrustumCorners(camera);
 
     // format: minX, minY, minZ, maxX, maxY, maxZ
@@ -60,12 +60,28 @@ export function getOrthographicCameraForPerspectiveCamera(camera) {
     let rangeY = boundingBox.maxZ - boundingBox.minZ;
     let centerY = (boundingBox.maxZ + boundingBox.minZ) / 2;
 
+    let left = -rangeX / 2;
+    let bottom = -rangeY / 2;
+    let right = rangeX / 2;
+    let top = rangeY / 2;
+
+    if (stable) {
+        const quantizationStepX = 16;
+        const quantizationStepY = 16;
+        left = quantize(left, quantizationStepX);
+        bottom = quantize(bottom, quantizationStepY);
+        right = quantize(right, quantizationStepX);
+        top = quantize(top, quantizationStepY);
+        centerX = quantize(centerX, quantizationStepX);
+        centerY = quantize(centerY, quantizationStepY);
+    }
+
     let cam = new THREE.OrthographicCamera(
-        -rangeX / 2,
-        rangeX / 2,
-        rangeY / 2,
-        -rangeY / 2,
-        -1000,
+        left,
+        right,
+        top,
+        bottom,
+        0.1,
         2000
     );
     cam.position.set(centerX, 500, centerY);
@@ -75,3 +91,6 @@ export function getOrthographicCameraForPerspectiveCamera(camera) {
     return cam;
 }
 
+function quantize(value, quant) {
+    return quant * Math.floor(value / quant);
+}
