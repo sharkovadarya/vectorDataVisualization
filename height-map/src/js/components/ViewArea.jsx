@@ -21,6 +21,15 @@ import './ZCoordinateEffectsComposer';
 import {setUpZCoordEffectsComposer} from "./ZCoordinateEffectsComposer";
 import './CSMFrustumSplit'
 import {calculateMaxSplitDistances, getOrthographicCameraForPerspectiveCamera} from "./CSMFrustumSplit";
+import {loadSVGToScene} from "./SVGLoader";
+
+const SVGSources = [
+    'https://raw.githubusercontent.com/openstreetmap/map-icons/master/svg/misc/landmark/mine.svg',
+    'https://raw.githubusercontent.com/openstreetmap/map-icons/master/svg/misc/landmark.svg',
+    'https://raw.githubusercontent.com/openstreetmap/map-icons/master/svg/misc/landmark/glacier.svg',
+    'https://raw.githubusercontent.com/openstreetmap/map-icons/master/svg/misc/landmark/peak_small.svg',
+    'https://raw.githubusercontent.com/openstreetmap/map-icons/master/svg/misc/landmark/works.svg'
+];
 
 // import {log} from 'log';
 
@@ -156,6 +165,7 @@ class ViewArea extends Component {
             this.shaderMaterial.uniforms.displayBorders.value = this.displayBorders ? 1 : 0;
             this.shaderMaterial.uniforms.splitCount.value = this.splitCount;
 
+            //renderer.render(this.bufferScene, this.orthographicCameras[0]);
             for (let i = 0; i < this.splitCount; ++i) {
                 renderer.setRenderTarget(this.bufferTextures[i]);
                 renderer.render(this.bufferScene, this.orthographicCameras[i]);
@@ -311,11 +321,59 @@ class ViewArea extends Component {
     initBufferTexture() {
         for (let i = 0; i < this.splitCount; ++i) {
             this.bufferTextures[i] = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
-                minFilter: THREE.LinearFilter,
+                minFilter: THREE.NearestFilter,
                 magFilter: THREE.NearestFilter
             });
         }
 
+        // add various points
+        loadSVGToScene(SVGSources[0], this.bufferScene, 300, 0, -900, -Math.PI / 2, 0, 0, 0.2, 0.2, 0.2);
+        loadSVGToScene(SVGSources[1], this.bufferScene, 100, 0, -600, -Math.PI / 2);
+        loadSVGToScene(SVGSources[2], this.bufferScene, -400, 0, 900, -Math.PI / 2);
+        loadSVGToScene(SVGSources[3], this.bufferScene, -900, 0, 20, -Math.PI / 2);
+        loadSVGToScene(SVGSources[4], this.bufferScene, 500, 0, -600, -Math.PI / 2);
+
+        // add a line
+        const lineMaterial = new THREE.LineBasicMaterial({color: 0x0000ff, linewidth: 10});
+        const points = [];
+        points.push(new THREE.Vector3(2000, -500, 0));
+        points.push(new THREE.Vector3(0, -2000, 0));
+        points.push(new THREE.Vector3(-2000, 1300, 0));
+
+        const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+        let line = new THREE.Line(lineGeometry, lineMaterial);
+        line.rotation.set(-Math.PI / 2, 0, 0);
+        this.bufferScene.add(line);
+
+
+        // add a polygon
+        let shape = new THREE.Shape(),
+            vertices = [],
+            x;
+
+        // Calculate the vertices of the n-gon.
+        for (x = 1; x <= 7; x++) {
+            vertices.push([
+                700 * Math.sin((Math.PI / 7) + (x * ((2 * Math.PI)/ 7))),
+                700 * Math.cos((Math.PI / 7) + (x * ((2 * Math.PI)/ 7)))
+            ]);
+        }
+
+        // Start at the last vertex.
+        shape.moveTo.apply(shape, vertices[7 - 1]);
+
+        // Connect each vertex to the next in sequential order.
+        for (x = 0; x < 7; x++) {
+            shape.lineTo.apply(shape, vertices[x]);
+        }
+        const geometry = new THREE.ShapeGeometry(shape);
+        const material = new THREE.MeshBasicMaterial({color: 0x00ff00});
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(700, 0, -1700);
+        mesh.rotation.set(-Math.PI / 2, 0, 0);
+        this.bufferScene.add( mesh );
+
+        // add circles
         for (let i = 0; i < 5; ++i) {
             for (let j = 0; j < 3; ++j) {
                 const geometry = new THREE.CircleGeometry(100, 256);
@@ -371,6 +429,8 @@ class ViewArea extends Component {
         this.near = Math.max(camera.near, -zMaxValue);
         this.far = Math.min(camera.far, -zMinValue);
     }
+
+
 }
 
 const mapStateToProps = (state /*, ownProps*/) => {
