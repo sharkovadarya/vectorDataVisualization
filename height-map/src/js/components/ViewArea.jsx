@@ -329,7 +329,7 @@ class ViewArea extends Component {
         // add various points
         loadSVGToScene(SVGSources[0], this.bufferScene, 300, 0, -900, -Math.PI / 2, 0, 0, 0.2, 0.2, 0.2);
         loadSVGToScene(SVGSources[1], this.bufferScene, 100, 0, -600, -Math.PI / 2);
-        loadSVGToScene(SVGSources[2], this.bufferScene, -400, 0, 900, -Math.PI / 2);
+        loadSVGToScene(SVGSources[2], this.bufferScene, -400, 0, 900, -Math.PI / 2, 0, 0, 5.0, 5.0, 5.0);
         loadSVGToScene(SVGSources[3], this.bufferScene, -900, 0, 20, -Math.PI / 2);
         loadSVGToScene(SVGSources[4], this.bufferScene, 500, 0, -600, -Math.PI / 2);
 
@@ -347,25 +347,24 @@ class ViewArea extends Component {
 
 
         // add a polygon
-        let shape = new THREE.Shape(),
-            vertices = [],
-            x;
+        let shape = new THREE.Shape(), vertices = [], x, n = 7;
 
         // Calculate the vertices of the n-gon.
-        for (x = 1; x <= 7; x++) {
+        for (x = 1; x <= n; x++) {
             vertices.push([
-                700 * Math.sin((Math.PI / 7) + (x * ((2 * Math.PI)/ 7))),
-                700 * Math.cos((Math.PI / 7) + (x * ((2 * Math.PI)/ 7)))
+                700 * Math.sin((Math.PI / n) + (x * ((2 * Math.PI) / n))),
+                700 * Math.cos((Math.PI / n) + (x * ((2 * Math.PI) / n)))
             ]);
         }
 
         // Start at the last vertex.
-        shape.moveTo.apply(shape, vertices[7 - 1]);
+        shape.moveTo.apply(shape, vertices[n - 1]);
 
         // Connect each vertex to the next in sequential order.
-        for (x = 0; x < 7; x++) {
+        for (x = 0; x < n; x++) {
             shape.lineTo.apply(shape, vertices[x]);
         }
+
         const geometry = new THREE.ShapeGeometry(shape);
         const material = new THREE.MeshBasicMaterial({color: 0x00ff00});
         const mesh = new THREE.Mesh(geometry, material);
@@ -384,8 +383,14 @@ class ViewArea extends Component {
                 mesh.position.set(-600 + 300 * i, 0, -300 + 300 * j);
                 mesh.rotation.set(-Math.PI / 2, 0, 0);
                 this.bufferScene.add(mesh);
-              }
+            }
         }
+
+        const bigCircleGeometry = new THREE.CircleGeometry(900, 64);
+        const bigCircleMesh = new THREE.Mesh(bigCircleGeometry, new THREE.MeshBasicMaterial({color: new THREE.Color('magenta')}));
+        bigCircleMesh.position.set(-1000, 0, 2000);
+        bigCircleMesh.rotation.set(-Math.PI / 2, 0, 0);
+        this.bufferScene.add(bigCircleMesh);
     }
 
     createOrthographicCameras() {
