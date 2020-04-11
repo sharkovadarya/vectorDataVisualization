@@ -111,7 +111,7 @@ class ViewArea extends Component {
             gui.add(parameters, 'displayTextures');
             gui.add(parameters, 'stable');
             const stableCSMFolder = gui.addFolder('Stable CSM Parameters');
-            stableCSMFolder.add(parameters, 'textureResolution', [512, 1024, 2048]);
+            stableCSMFolder.add(parameters, 'textureResolution').min(512).max(2048).step(1);
             stableCSMFolder.add(parameters, 'firstTextureSize').min(50).max(1000).step(1);
             stableCSMFolder.add(parameters, 'projectedAreaSide').min(5000).max(30000).step(100);
             stableCSMFolder.add(parameters, 'splitScheme', ["linear", "logarithmic"]);
