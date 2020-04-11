@@ -14,18 +14,18 @@ export function calculateMaxSplitDistances(maxSplitDistances, splitCount, splitL
 }
 
 function calculateCameraFrustumCorners(camera) {
-    let ndc_corners = [
+    let NDCCorners = [
         [-1,-1,-1], [1,-1,-1], [-1,1,-1], [1,1,-1],
         [-1,-1, 1], [1,-1, 1], [-1,1, 1], [1,1, 1]];
 
-    let world_corners = [];
-    for (let i = 0; i < ndc_corners.length; ++i) {
-        let ndc_v = new THREE.Vector3(...ndc_corners[i]);
-        let v_cam = ndc_v.unproject(camera);
-        // let v_cam_4 = new THREE.Vector4(v_cam.x, v_cam.y, v_cam.z, 1);
-        world_corners.push(v_cam);
+    let worldCorners = [];
+    for (let i = 0; i < NDCCorners.length; ++i) {
+        let NDCVector = new THREE.Vector3(...NDCCorners[i]);
+        let vCam = NDCVector.unproject(camera);
+        worldCorners.push(vCam);
     }
-    return world_corners.map(function (p) {
+
+    return worldCorners.map(function (p) {
         return new THREE.Vector3(p.x, p.y, p.z);
     });
 }
@@ -49,7 +49,11 @@ function calculateBoundingBox(points) {
     return {minX: minX, minY: minY, minZ: minZ, maxX: maxX, maxY: maxY, maxZ: maxZ};
 }
 
-export function getOrthographicCameraForPerspectiveCamera(camera, stable = false, textureSize = 2048) {
+export function getOrthographicCameraForPerspectiveCamera(
+    camera,
+    stable = false,
+    texelSize
+) {
     const frustumCorners = calculateCameraFrustumCorners(camera);
 
     // format: minX, minY, minZ, maxX, maxY, maxZ
@@ -66,24 +70,10 @@ export function getOrthographicCameraForPerspectiveCamera(camera, stable = false
     let top = rangeY / 2;
 
     if (stable) {
-        const quantizationStepX = 16;
-        const quantizationStepY = 16;
-        left = quantize(left, quantizationStepX);
-        bottom = quantize(bottom, quantizationStepY);
-        right = quantize(right, quantizationStepX);
-        top = quantize(top, quantizationStepY);
-        centerX = quantize(centerX, quantizationStepX);
-        centerY = quantize(centerY, quantizationStepY);
+        // TODO quantize by texelSize
     }
 
-    let cam = new THREE.OrthographicCamera(
-        left,
-        right,
-        top,
-        bottom,
-        0.1,
-        2000
-    );
+    let cam = new THREE.OrthographicCamera(left, right, top, bottom, 0.1, 2000);
     cam.position.set(centerX, 500, centerY);
     cam.rotation.set(-Math.PI / 2, 0, 0);
     cam.updateMatrixWorld( true );
