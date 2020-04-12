@@ -45,7 +45,7 @@ class ViewArea extends Component {
 
         this.CSMparameters = {
             splitCount: 4,
-            splitLambda: 1.0,
+            splitLambda: 0.0,
             maxSplitDistances: [],
             near: 1,
             far: 20000
@@ -55,8 +55,7 @@ class ViewArea extends Component {
             enabled: true,
             textureResolution: 512,
             firstTextureSize: 50,
-            projectedAreaSide: 5000,
-            splitScheme: 'linear'
+            projectedAreaSide: 5000
         };
 
         this.canvasRef = React.createRef();
@@ -88,14 +87,13 @@ class ViewArea extends Component {
         const CSMParameters = function () {
             this.splitCount = 4;
             this.splitType = "linear";
-            this.splitLambda = 1.0;
+            this.splitLambda = 0.0;
             this.displayBorders = true;
             this.displayTextures = true;
             this.stable = true;
             this.textureResolution = 512;
             this.firstTextureSize = 50;
             this.projectedAreaSide = 5000;
-            this.splitScheme = 'linear'
         };
 
         this.debugCount = 0;
@@ -114,7 +112,6 @@ class ViewArea extends Component {
             stableCSMFolder.add(parameters, 'textureResolution').min(512).max(2048).step(1);
             stableCSMFolder.add(parameters, 'firstTextureSize').min(50).max(1000).step(1);
             stableCSMFolder.add(parameters, 'projectedAreaSide').min(5000).max(30000).step(100);
-            stableCSMFolder.add(parameters, 'splitScheme', ["linear", "logarithmic"]);
 
             let update = function () {
                 requestAnimationFrame(update);
@@ -146,7 +143,9 @@ class ViewArea extends Component {
                 refs.stableCSMParameters.textureResolution = parameters.textureResolution;
                 refs.stableCSMParameters.firstTextureSize = parameters.firstTextureSize;
                 refs.stableCSMParameters.projectedAreaSide = parameters.projectedAreaSide;
-                refs.stableCSMParameters.splitScheme = parameters.splitScheme;
+                refs.bufferTextures.forEach(function (t) {
+                    t.setSize(parameters.textureResolution, parameters.textureResolution);
+                })
             };
             update();
         };
@@ -351,7 +350,7 @@ class ViewArea extends Component {
 
     initBufferTexture() {
         for (let i = 0; i < this.CSMparameters.splitCount; ++i) {
-            this.bufferTextures[i] = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+            this.bufferTextures[i] = new THREE.WebGLRenderTarget(this.stableCSMParameters.textureResolution, this.stableCSMParameters.textureResolution, {
                 minFilter: THREE.NearestFilter,
                 magFilter: THREE.NearestFilter
             });
@@ -424,6 +423,19 @@ class ViewArea extends Component {
         this.bufferScene.add(bigCircleMesh);
     }
 
+    // same as CSM split, refactoring possible
+    calculateTextureSizes(splitCount, splitLambda, initMin, initMax) {
+        let arr = [initMin];
+
+        for (let i = 1; i < splitCount; i++) {
+            let f = i / (splitCount - 1);
+            let l = initMin * Math.pow(initMax / initMin, f);
+            let u = initMin + (initMax - initMin) * f;
+            arr[i] = l * splitLambda + u * (1 - splitLambda);
+        }
+        return arr
+    }
+
     createOrthographicCameras() {
         this.CSMparameters.maxSplitDistances = calculateMaxSplitDistances(
             this.CSMparameters.maxSplitDistances,
@@ -433,21 +445,12 @@ class ViewArea extends Component {
             this.CSMparameters.far
         );
 
-        const textureSizes = [this.stableCSMParameters.firstTextureSize];
-        if (this.stableCSMParameters.enabled) {
-            const f = 1 / (this.CSMparameters.splitCount - 1);
-            if (this.stableCSMParameters.splitScheme === 'linear') {
-                const diff = (this.stableCSMParameters.projectedAreaSide - this.stableCSMParameters.firstTextureSize) * f;
-                for (let i = 1; i < this.CSMparameters.splitCount; ++i) {
-                    textureSizes.push(textureSizes[i - 1] + diff)
-                }
-            } else if (this.stableCSMParameters.splitScheme === 'logarithmic') {
-                textureSizes.push(
-                    this.stableCSMParameters.firstTextureSize *
-                    Math.pow(this.stableCSMParameters.projectedAreaSide / this.stableCSMParameters.firstTextureSize, f)
-                );
-            }
-        }
+        const textureSizes = this.calculateTextureSizes(
+            this.CSMparameters.splitCount,
+            this.CSMparameters.splitLambda,
+            this.stableCSMParameters.firstTextureSize,
+            this.stableCSMParameters.projectedAreaSide
+        );
 
         for (let i = 0; i < this.CSMparameters.splitCount; ++i) {
             let currentCamera = new THREE.PerspectiveCamera(this.camera.fov, this.camera.aspect, this.CSMparameters.maxSplitDistances[i], this.CSMparameters.maxSplitDistances[i + 1]);
@@ -491,8 +494,6 @@ class ViewArea extends Component {
         this.CSMparameters.near = Math.max(camera.near, -zMaxValue);
         this.CSMparameters.far = Math.min(camera.far, -zMinValue);
     }
-
-
 }
 
 const mapStateToProps = (state /*, ownProps*/) => {

@@ -25,44 +25,45 @@ varying float vAmount;
 bool get_projected_texture_color(vec4 coord, int idx, out vec4 color) {
   vec3 projected_c = coord.xyz / coord.w;
   bool in_range = projected_c.x >= -1.0 && projected_c.x <= 1.0 &&
-  projected_c.y >= -1.0 && projected_c.y <= 1.0;
+                  projected_c.y >= -1.0 && projected_c.y <= 1.0;
   if (in_range) {
+    vec2 tex_coord = vec2(0.5, 0.5) + 0.5 * projected_c.xy;
     // a switch statement stops getting parsed after the first colon
     // directly indexing an array (vectorsTextures[i]) proved to be impossible
     // DataTexture2DArray is somehow not bundled in the three.js npm version
     // thus we have to resort to a horrible lengthy if statement
     if (idx == 0) {
-      color = texture2D(vectorsTextures[0], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[0], tex_coord);
     } else if (idx == 1) {
-      color = texture2D(vectorsTextures[1], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[1], tex_coord);
     } else if (idx == 2) {
-      color = texture2D(vectorsTextures[2], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[2], tex_coord);
     } else if (idx == 3) {
-      color = texture2D(vectorsTextures[3], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[3], tex_coord);
     } else if (idx == 4) {
-      color = texture2D(vectorsTextures[4], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[4], tex_coord);
     } else if (idx == 5) {
-      color = texture2D(vectorsTextures[5], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[5], tex_coord);
     } else if (idx == 6) {
-      color = texture2D(vectorsTextures[6], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[6], tex_coord);
     } else if (idx == 7) {
-      color = texture2D(vectorsTextures[7], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[7], tex_coord);
     } else if (idx == 8) {
-      color = texture2D(vectorsTextures[8], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[8], tex_coord);
     } else if (idx == 9) {
-      color = texture2D(vectorsTextures[9], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[9], tex_coord);
     } else if (idx == 10) {
-      color = texture2D(vectorsTextures[10], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[10], tex_coord);
     } else if (idx == 11) {
-      color = texture2D(vectorsTextures[11], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[11], tex_coord);
     } else if (idx == 12) {
-      color = texture2D(vectorsTextures[12], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[12], tex_coord);
     } else if (idx == 13) {
-      color = texture2D(vectorsTextures[13], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[13], tex_coord);
     } else if (idx == 14) {
-      color = texture2D(vectorsTextures[14], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[14], tex_coord);
     } else if (idx == 15) {
-      color = texture2D(vectorsTextures[15], vec2(0.5, 0.5) + 0.5 * projected_c.xy);
+      color = texture2D(vectorsTextures[15], tex_coord);
     }
 
     if (displayBorders == 1) {

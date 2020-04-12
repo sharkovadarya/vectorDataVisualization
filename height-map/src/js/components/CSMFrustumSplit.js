@@ -70,7 +70,14 @@ export function getOrthographicCameraForPerspectiveCamera(
     let top = rangeY / 2;
 
     if (stable) {
-        // TODO quantize by texelSize
+        left = quantize(left, texelSize);
+        bottom = quantize(bottom, texelSize);
+        rangeX = quantize(rangeX, texelSize);
+        rangeY = quantize(rangeY, texelSize);
+        right = left + rangeX;
+        top = bottom + rangeY;
+        centerX = quantize(centerX, texelSize);
+        centerY = quantize(centerY, texelSize);
     }
 
     let cam = new THREE.OrthographicCamera(left, right, top, bottom, 0.1, 2000);
