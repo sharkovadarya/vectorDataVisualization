@@ -48,7 +48,8 @@ class ViewArea extends Component {
             splitLambda: 0.0,
             maxSplitDistances: [],
             near: 1,
-            far: 20000
+            far: 20000,
+            cascadesBlendingFactor: 0.1
         };
 
         this.stableCSMParameters = {
@@ -94,6 +95,7 @@ class ViewArea extends Component {
             this.textureResolution = 512;
             this.firstTextureSize = 50;
             this.projectedAreaSide = 5000;
+            this.cascadesBlendingFactor = 0.1;
         };
 
         this.debugCount = 0;
@@ -105,6 +107,7 @@ class ViewArea extends Component {
             gui.add(parameters, 'splitCount').min(1).max(refs.constants.maxSplitCount).step(1);
             gui.add(parameters, 'splitType', ["logarithmic", "linear", "mixed"]);
             gui.add(parameters, 'splitLambda').min(0.0).max(1.0).step(0.001);
+            gui.add(parameters, 'cascadesBlendingFactor').min(0.0).max(1.0).step(0.001);
             gui.add(parameters, 'displayBorders');
             gui.add(parameters, 'displayTextures');
             gui.add(parameters, 'stable');
@@ -130,6 +133,7 @@ class ViewArea extends Component {
 
                 refs.CSMparameters.splitCount = parameters.splitCount;
                 refs.CSMparameters.splitLambda = parameters.splitLambda;
+                refs.CSMparameters.cascadesBlendingFactor = parameters.cascadesBlendingFactor;
                 refs.displayBorders = parameters.displayBorders;
                 refs.displayTextures = parameters.displayTextures;
 
@@ -194,6 +198,7 @@ class ViewArea extends Component {
 
             this.shaderMaterial.uniforms.displayBorders.value = this.displayBorders ? 1 : 0;
             this.shaderMaterial.uniforms.splitCount.value = this.CSMparameters.splitCount;
+            this.shaderMaterial.uniforms.cascadesBlendingFactor.value = this.CSMparameters.cascadesBlendingFactor;
 
             //renderer.render(this.bufferScene, this.orthographicCameras[0]);
             for (let i = 0; i < this.CSMparameters.splitCount; ++i) {
@@ -328,7 +333,8 @@ class ViewArea extends Component {
                 })
             },
             textureMatrices: {type: "m4v", value: new Array(this.constants.maxSplitCount).fill(new THREE.Matrix4())},
-            displayBorders: {type: "i", value: 0}
+            displayBorders: {type: "i", value: 0},
+            cascadesBlendingFactor: {type: "f", value: this.CSMparameters.cascadesBlendingFactor}
         };
 
         const plane = new THREE.Mesh(geometry, this.shaderMaterial);

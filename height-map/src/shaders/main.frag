@@ -9,6 +9,8 @@ uniform sampler2D snowyTexture;
 uniform sampler2D vectorsTextures[MAX_SPLITS];
 uniform int splitCount;
 
+uniform float cascadesBlendingFactor;
+
 uniform int displayBorders;
 
 uniform vec3 fogColor;
@@ -76,7 +78,7 @@ bool get_projected_texture_color(vec4 coord, int idx, out vec4 color) {
 
   }
 
-  color =  vec4(-1.0, 0.0, 0.0, 0.0);
+  color = vec4(-1.0, 0.0, 0.0, 0.0);
   return false;
 }
 
@@ -93,11 +95,20 @@ void main() {
     if (i >= splitCount) {
       break;
     }
+    vec3 projected_c = projected_texcoords[i].xyz / projected_texcoords[i].w;
     if (get_projected_texture_color(projected_texcoords[i], i, color)) {
-      vec4 next_split_color = vec4(-1.0, 0.0, 0.0, 0.0);
-      if (i + 1 < splitCount && get_projected_texture_color(projected_texcoords[i], i, next_split_color)) {
-        color = mix(color, next_split_color, 0.5);
+
+      if (projected_c.x <= 1.0 && projected_c.x >= 1.0 - cascadesBlendingFactor ||
+          projected_c.y <= 1.0 && projected_c.y >= 1.0 - cascadesBlendingFactor ||
+          projected_c.x >= -1.0 && projected_c.x <= -1.0 + cascadesBlendingFactor ||
+          projected_c.y >= -1.0 && projected_c.y <= -1.0 + cascadesBlendingFactor) {
+        vec4 next_split_color = vec4(-1.0, 0.0, 0.0, 0.0);
+        // this adds image artifacts
+        if (i + 1 < splitCount && get_projected_texture_color(projected_texcoords[i + 1], i + 1, next_split_color)) {
+          color = mix(color, next_split_color, 0.5);
+        }
       }
+
       break;
     }
   }
