@@ -20,7 +20,11 @@ import {connect} from 'react-redux'
 import './ZCoordinateEffectsComposer';
 import {setUpZCoordEffectsComposer} from "./ZCoordinateEffectsComposer";
 import './CSMFrustumSplit'
-import {calculateMaxSplitDistances, getOrthographicCameraForPerspectiveCamera} from "./CSMFrustumSplit";
+import {
+    calculateMaxSplitDistances,
+    getOrthographicCameraForPerspectiveCamera,
+    getStableOrthographicCameraForPerspectiveCamera
+} from "./CSMFrustumSplit";
 import {loadSVGToScene} from "./SVGLoader";
 
 const SVGSources = [
@@ -463,11 +467,11 @@ class ViewArea extends Component {
             currentCamera.position.set(this.camera.position.x, this.camera.position.y, this.camera.position.z);
             currentCamera.rotation.set(this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z);
             currentCamera.updateMatrixWorld(true);
-            this.orthographicCameras[i] = getOrthographicCameraForPerspectiveCamera(
-                currentCamera,
-                this.stableCSMParameters.enabled,
-                this.stableCSMParameters.textureResolution / textureSizes[i]
-            );
+            if (this.stableCSMParameters.enabled) {
+                this.orthographicCameras[i] = getStableOrthographicCameraForPerspectiveCamera(currentCamera, textureSizes[i], this.stableCSMParameters.textureResolution);
+            } else {
+                this.orthographicCameras[i] = getOrthographicCameraForPerspectiveCamera(currentCamera);
+            }
         }
     }
 

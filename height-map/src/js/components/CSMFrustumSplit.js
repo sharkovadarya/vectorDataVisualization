@@ -49,14 +49,9 @@ function calculateBoundingBox(points) {
     return {minX: minX, minY: minY, minZ: minZ, maxX: maxX, maxY: maxY, maxZ: maxZ};
 }
 
-export function getOrthographicCameraForPerspectiveCamera(
-    camera,
-    stable = false,
-    texelSize
-) {
+export function getOrthographicCameraForPerspectiveCamera(camera) {
     const frustumCorners = calculateCameraFrustumCorners(camera);
 
-    // format: minX, minY, minZ, maxX, maxY, maxZ
     const boundingBox = calculateBoundingBox(frustumCorners);
 
     let rangeX = boundingBox.maxX - boundingBox.minX;
@@ -69,21 +64,30 @@ export function getOrthographicCameraForPerspectiveCamera(
     let right = rangeX / 2;
     let top = rangeY / 2;
 
-    if (stable) {
-        left = quantize(left, texelSize);
-        bottom = quantize(bottom, texelSize);
-        rangeX = quantize(rangeX, texelSize);
-        rangeY = quantize(rangeY, texelSize);
-        right = left + rangeX;
-        top = bottom + rangeY;
-        centerX = quantize(centerX, texelSize);
-        centerY = quantize(centerY, texelSize);
-    }
-
     let cam = new THREE.OrthographicCamera(left, right, top, bottom, 0.1, 2000);
     cam.position.set(centerX, 500, centerY);
     cam.rotation.set(-Math.PI / 2, 0, 0);
     cam.updateMatrixWorld( true );
+
+    return cam;
+}
+
+export function getStableOrthographicCameraForPerspectiveCamera(camera, textureSize, textureResolution) {
+    let texelSize = textureSize / textureResolution;
+    let centerX = quantize(camera.position.x, texelSize);
+    //let centerY = quantize(camera.position.y, texelSize);
+    let centerY = camera.position.y;
+    let centerZ = quantize(camera.position.z, texelSize);
+
+    let left = centerX - textureSize / 2;
+    let right = centerX + textureSize / 2;
+    let top = centerZ + textureSize / 2;
+    let bottom = centerZ - textureSize / 2;
+
+    let cam = new THREE.OrthographicCamera(left, right, top, bottom, 0.1, 20000);
+    cam.position.set(centerX, centerY, centerZ);
+    cam.rotation.set(-Math.PI / 2, 0, 0);
+    cam.updateMatrixWorld(true);
 
     return cam;
 }
