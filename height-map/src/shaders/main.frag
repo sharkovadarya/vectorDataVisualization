@@ -1,4 +1,4 @@
-const int MAX_SPLITS = 16;
+const int MAX_SPLITS = 10;
 
 uniform sampler2D oceanTexture;
 uniform sampler2D sandyTexture;
@@ -54,7 +54,7 @@ bool get_projected_texture_color(vec4 coord, int idx, out vec4 color) {
       color = texture2D(vectorsTextures[8], tex_coord);
     } else if (idx == 9) {
       color = texture2D(vectorsTextures[9], tex_coord);
-    } else if (idx == 10) {
+    }/* else if (idx == 10) {
       color = texture2D(vectorsTextures[10], tex_coord);
     } else if (idx == 11) {
       color = texture2D(vectorsTextures[11], tex_coord);
@@ -66,7 +66,7 @@ bool get_projected_texture_color(vec4 coord, int idx, out vec4 color) {
       color = texture2D(vectorsTextures[14], tex_coord);
     } else if (idx == 15) {
       color = texture2D(vectorsTextures[15], tex_coord);
-    }
+    }*/
 
     if (displayBorders == 1) {
       if (projected_c.x <= -0.95 || projected_c.y <= -0.95 ||

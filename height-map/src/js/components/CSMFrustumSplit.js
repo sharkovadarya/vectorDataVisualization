@@ -75,7 +75,6 @@ export function getOrthographicCameraForPerspectiveCamera(camera) {
 export function getStableOrthographicCameraForPerspectiveCamera(camera, textureSize, textureResolution) {
     let texelSize = textureSize / textureResolution;
     let centerX = quantize(camera.position.x, texelSize);
-    //let centerY = quantize(camera.position.y, texelSize);
     let centerY = camera.position.y;
     let centerZ = quantize(camera.position.z, texelSize);
 

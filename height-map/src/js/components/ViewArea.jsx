@@ -43,7 +43,7 @@ class ViewArea extends Component {
         this.state = {};
 
         this.constants = {
-            maxSplitCount: 16,
+            maxSplitCount: 10,
             terrainBumpScale: 400.0,
         };
 

@@ -1,6 +1,6 @@
 //#pragma loader: import {process} from './../shaders/lib.glsl';
 
-const int MAX_SPLITS = 16;
+const int MAX_SPLITS = 10;
 
 uniform sampler2D bumpTexture;
 uniform float bumpScale;
