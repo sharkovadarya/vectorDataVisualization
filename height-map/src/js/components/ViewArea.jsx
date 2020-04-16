@@ -47,18 +47,19 @@ class ViewArea extends Component {
             terrainBumpScale: 400.0,
         };
 
-        this.CSMparameters = {
+        this.CSMParameters = {
             splitCount: 4,
             splitLambda: 0.0,
             maxSplitDistances: [],
             near: 1,
             far: 20000,
-            cascadesBlendingFactor: 0.1
+            textureResolution: 512,
+            cascadesBlendingFactor: 0.1,
+            pushFar: 500
         };
 
         this.stableCSMParameters = {
             enabled: true,
-            textureResolution: 512,
             firstTextureSize: 50,
             projectedAreaSide: 5000
         };
@@ -85,7 +86,7 @@ class ViewArea extends Component {
         this.createLights();
 
         this.shaderMaterial = new THREE.ShaderMaterial({uniforms: {}, vertexShader: vxShader, fragmentShader: fragShader});
-        this.createMeshes();
+        this.terrain = this.createMeshes();
 
         this.debugScene = new THREE.Scene();
 
@@ -100,6 +101,10 @@ class ViewArea extends Component {
             this.firstTextureSize = 50;
             this.projectedAreaSide = 5000;
             this.cascadesBlendingFactor = 0.1;
+            this.pushFar = 500;
+            this.addFrustum = function() {
+                refs.scene.add(new THREE.CameraHelper(refs.camera.clone()));
+            };
         };
 
         this.debugCount = 0;
@@ -114,9 +119,11 @@ class ViewArea extends Component {
             gui.add(parameters, 'cascadesBlendingFactor').min(0.0).max(1.0).step(0.001);
             gui.add(parameters, 'displayBorders');
             gui.add(parameters, 'displayTextures');
+            gui.add(parameters, 'addFrustum');
+            gui.add(parameters, 'textureResolution').min(512).max(2048).step(1);
+            gui.add(parameters, 'pushFar').min(0).max(4000).step(1);
             gui.add(parameters, 'stable');
             const stableCSMFolder = gui.addFolder('Stable CSM Parameters');
-            stableCSMFolder.add(parameters, 'textureResolution').min(512).max(2048).step(1);
             stableCSMFolder.add(parameters, 'firstTextureSize').min(50).max(1000).step(1);
             stableCSMFolder.add(parameters, 'projectedAreaSide').min(5000).max(30000).step(100);
 
@@ -135,9 +142,9 @@ class ViewArea extends Component {
                     gui.__controllers[i].updateDisplay();
                 }
 
-                refs.CSMparameters.splitCount = parameters.splitCount;
-                refs.CSMparameters.splitLambda = parameters.splitLambda;
-                refs.CSMparameters.cascadesBlendingFactor = parameters.cascadesBlendingFactor;
+                refs.CSMParameters.splitCount = parameters.splitCount;
+                refs.CSMParameters.splitLambda = parameters.splitLambda;
+                refs.CSMParameters.cascadesBlendingFactor = parameters.cascadesBlendingFactor;
                 refs.displayBorders = parameters.displayBorders;
                 refs.displayTextures = parameters.displayTextures;
 
@@ -148,12 +155,15 @@ class ViewArea extends Component {
                 }
 
                 refs.stableCSMParameters.enabled = parameters.stable;
-                refs.stableCSMParameters.textureResolution = parameters.textureResolution;
+                refs.CSMParameters.textureResolution = parameters.textureResolution;
                 refs.stableCSMParameters.firstTextureSize = parameters.firstTextureSize;
                 refs.stableCSMParameters.projectedAreaSide = parameters.projectedAreaSide;
                 refs.bufferTextures.forEach(function (t) {
-                    t.setSize(parameters.textureResolution, parameters.textureResolution);
+                    if (t !== null) {
+                        t.setSize(parameters.textureResolution, parameters.textureResolution);
+                    }
                 })
+                refs.CSMParameters.pushFar = parameters.pushFar;
             };
             update();
         };
@@ -191,7 +201,7 @@ class ViewArea extends Component {
             composer.render(deltaTime);
             let pixels = new Float32Array(4);
             composer.renderer.readRenderTargetPixels(composer.readBuffer, 0, 0, 1, 1, pixels);
-            this.calculateNearAndFar(pixels[0], pixels[1], this.camera);
+            this.calculateNearAndFar(pixels[0], pixels[1]);
 
             // restore default renderer parameters
             renderer.setViewport(0, 0, canvas.width, canvas.height);
@@ -201,11 +211,11 @@ class ViewArea extends Component {
             this.createTextureMatrices();
 
             this.shaderMaterial.uniforms.displayBorders.value = this.displayBorders ? 1 : 0;
-            this.shaderMaterial.uniforms.splitCount.value = this.CSMparameters.splitCount;
-            this.shaderMaterial.uniforms.cascadesBlendingFactor.value = this.CSMparameters.cascadesBlendingFactor;
+            this.shaderMaterial.uniforms.splitCount.value = this.CSMParameters.splitCount;
+            this.shaderMaterial.uniforms.cascadesBlendingFactor.value = this.CSMParameters.cascadesBlendingFactor;
 
             //renderer.render(this.bufferScene, this.orthographicCameras[0]);
-            for (let i = 0; i < this.CSMparameters.splitCount; ++i) {
+            for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
                 renderer.setRenderTarget(this.bufferTextures[i]);
                 renderer.render(this.bufferScene, this.orthographicCameras[i]);
             }
@@ -327,7 +337,7 @@ class ViewArea extends Component {
             fogColor: {type: "c", value: null},
             fogNear: {type: "f", value: 0},
             fogFar: {type: "f", value: 0},
-            splitCount: {type: "i", value: this.CSMparameters.splitCount},
+            splitCount: {type: "i", value: this.CSMParameters.splitCount},
             vectorsTextures: {
                 type: "tv", value: this.bufferTextures.map(function (bt) {
                     if (bt !== null) {
@@ -338,7 +348,7 @@ class ViewArea extends Component {
             },
             textureMatrices: {type: "m4v", value: new Array(this.constants.maxSplitCount).fill(new THREE.Matrix4())},
             displayBorders: {type: "i", value: 0},
-            cascadesBlendingFactor: {type: "f", value: this.CSMparameters.cascadesBlendingFactor}
+            cascadesBlendingFactor: {type: "f", value: this.CSMParameters.cascadesBlendingFactor}
         };
 
         const plane = new THREE.Mesh(geometry, this.shaderMaterial);
@@ -359,8 +369,8 @@ class ViewArea extends Component {
     }
 
     initBufferTexture() {
-        for (let i = 0; i < this.CSMparameters.splitCount; ++i) {
-            this.bufferTextures[i] = new THREE.WebGLRenderTarget(this.stableCSMParameters.textureResolution, this.stableCSMParameters.textureResolution, {
+        for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
+            this.bufferTextures[i] = new THREE.WebGLRenderTarget(this.CSMParameters.textureResolution, this.CSMParameters.textureResolution, {
                 minFilter: THREE.NearestFilter,
                 magFilter: THREE.NearestFilter
             });
@@ -447,28 +457,28 @@ class ViewArea extends Component {
     }
 
     createOrthographicCameras() {
-        this.CSMparameters.maxSplitDistances = calculateMaxSplitDistances(
-            this.CSMparameters.maxSplitDistances,
-            this.CSMparameters.splitCount,
-            this.CSMparameters.splitLambda,
-            this.CSMparameters.near,
-            this.CSMparameters.far
+        this.CSMParameters.maxSplitDistances = calculateMaxSplitDistances(
+            this.CSMParameters.maxSplitDistances,
+            this.CSMParameters.splitCount,
+            this.CSMParameters.splitLambda,
+            this.CSMParameters.near,
+            this.CSMParameters.far
         );
 
         const textureSizes = this.calculateTextureSizes(
-            this.CSMparameters.splitCount,
-            this.CSMparameters.splitLambda,
+            this.CSMParameters.splitCount,
+            this.CSMParameters.splitLambda,
             this.stableCSMParameters.firstTextureSize,
             this.stableCSMParameters.projectedAreaSide
         );
 
-        for (let i = 0; i < this.CSMparameters.splitCount; ++i) {
-            let currentCamera = new THREE.PerspectiveCamera(this.camera.fov, this.camera.aspect, this.CSMparameters.maxSplitDistances[i], this.CSMparameters.maxSplitDistances[i + 1]);
+        for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
+            let currentCamera = new THREE.PerspectiveCamera(this.camera.fov, this.camera.aspect, this.CSMParameters.maxSplitDistances[i], this.CSMParameters.maxSplitDistances[i + 1]);
             currentCamera.position.set(this.camera.position.x, this.camera.position.y, this.camera.position.z);
             currentCamera.rotation.set(this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z);
             currentCamera.updateMatrixWorld(true);
             if (this.stableCSMParameters.enabled) {
-                this.orthographicCameras[i] = getStableOrthographicCameraForPerspectiveCamera(currentCamera, textureSizes[i], this.stableCSMParameters.textureResolution);
+                this.orthographicCameras[i] = getStableOrthographicCameraForPerspectiveCamera(currentCamera, textureSizes[i], this.CSMParameters.textureResolution);
             } else {
                 this.orthographicCameras[i] = getOrthographicCameraForPerspectiveCamera(currentCamera);
             }
@@ -490,7 +500,7 @@ class ViewArea extends Component {
         const debugSize = 150;
 
         this.debugScene.add(this.camera);
-        for (let i = 0; i < this.CSMparameters.splitCount; ++i) {
+        for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
             const textureGeometry = new THREE.PlaneBufferGeometry(debugSize * this.camera.aspect, debugSize, 128, 128);
             const textureMaterial = new THREE.MeshBasicMaterial({map: this.bufferTextures[i].texture, depthTest: false});
             const textureMesh = new THREE.Mesh(textureGeometry, textureMaterial);
@@ -500,9 +510,9 @@ class ViewArea extends Component {
         }
     }
 
-    calculateNearAndFar(zMinValue, zMaxValue, camera) {
-        this.CSMparameters.near = Math.max(camera.near, -zMaxValue);
-        this.CSMparameters.far = Math.min(camera.far, -zMinValue);
+    calculateNearAndFar(zMinValue, zMaxValue) {
+        this.CSMParameters.near = -zMaxValue;
+        this.CSMParameters.far = -zMinValue + this.CSMParameters.pushFar;
     }
 }
 
