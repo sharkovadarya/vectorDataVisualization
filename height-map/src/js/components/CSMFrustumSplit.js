@@ -72,16 +72,16 @@ export function getOrthographicCameraForPerspectiveCamera(camera) {
     return cam;
 }
 
-export function getStableOrthographicCameraForPerspectiveCamera(camera, textureSize, textureResolution) {
+export function getStableOrthographicCameraForPerspectiveCamera(camera, textureSize, textureResolution, centerPosition) {
     let texelSize = textureSize / textureResolution;
     let centerX = quantize(camera.position.x, texelSize);
     let centerY = camera.position.y;
     let centerZ = quantize(camera.position.z, texelSize);
 
-    let left = centerX - textureSize / 2;
-    let right = centerX + textureSize / 2;
-    let top = centerZ + textureSize / 2;
-    let bottom = centerZ - textureSize / 2;
+    let left = -textureSize / 2;
+    let right = textureSize / 2;
+    let top = textureSize / 2;
+    let bottom = -textureSize / 2;
 
     let cam = new THREE.OrthographicCamera(left, right, top, bottom, 0.1, 20000);
     cam.position.set(centerX, centerY, centerZ);

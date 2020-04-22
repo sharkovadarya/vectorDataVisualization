@@ -104,6 +104,9 @@ class ViewArea extends Component {
             this.pushFar = 500;
             this.addFrustum = function() {
                 refs.scene.add(new THREE.CameraHelper(refs.camera.clone()));
+                for (let i = 0; i < refs.CSMParameters.splitCount; i++) {
+                    refs.scene.add(new THREE.CameraHelper(refs.orthographicCameras[i].clone()));
+                }
             };
         };
 
@@ -415,13 +418,15 @@ class ViewArea extends Component {
             this.stableCSMParameters.projectedAreaSide
         );
 
+        let centerPosition = new THREE.Vector3();
+        this.terrain.getWorldPosition(centerPosition);
         for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
             let currentCamera = new THREE.PerspectiveCamera(this.camera.fov, this.camera.aspect, this.CSMParameters.maxSplitDistances[i], this.CSMParameters.maxSplitDistances[i + 1]);
             currentCamera.position.set(this.camera.position.x, this.camera.position.y, this.camera.position.z);
             currentCamera.rotation.set(this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z);
             currentCamera.updateMatrixWorld(true);
             if (this.stableCSMParameters.enabled) {
-                this.orthographicCameras[i] = getStableOrthographicCameraForPerspectiveCamera(currentCamera, textureSizes[i], this.CSMParameters.textureResolution);
+                this.orthographicCameras[i] = getStableOrthographicCameraForPerspectiveCamera(currentCamera, textureSizes[i], this.CSMParameters.textureResolution, centerPosition);
             } else {
                 this.orthographicCameras[i] = getOrthographicCameraForPerspectiveCamera(currentCamera);
             }
