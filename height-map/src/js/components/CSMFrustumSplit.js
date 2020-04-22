@@ -1,4 +1,4 @@
-import * as THREE from "three-full";
+import * as THREE from "three";
 
 
 export function calculateMaxSplitDistances(maxSplitDistances, splitCount, splitLambda, near, far) {

@@ -1,5 +1,6 @@
 import React, {Component} from "react";
-import * as THREE from 'three-full';
+import * as THREE from 'three';
+import {OrbitControls} from "three/examples/jsm/controls/OrbitControls";
 import * as dat from 'dat.gui'
 
 import vxShader from '../../shaders/main.vert';
@@ -15,6 +16,9 @@ import waterTexture from '../../textures/water512.jpg';
 import heightMapTexture from '../../textures/height_map.png';
 import meadowTexture from '../../textures/grass-512.jpg';
 
+import DEMTexture from '../../textures/bumpTexture.jpg';
+import terrainTexture from '../../textures/terrainTexture.jpg'
+
 import {connect} from 'react-redux'
 
 import './ZCoordinateEffectsComposer';
@@ -27,15 +31,9 @@ import {
 } from "./CSMFrustumSplit";
 import {loadSVGToScene} from "./SVGLoader";
 
-const SVGSources = [
-    'https://raw.githubusercontent.com/openstreetmap/map-icons/master/svg/misc/landmark/mine.svg',
-    'https://raw.githubusercontent.com/openstreetmap/map-icons/master/svg/misc/landmark.svg',
-    'https://raw.githubusercontent.com/openstreetmap/map-icons/master/svg/misc/landmark/glacier.svg',
-    'https://raw.githubusercontent.com/openstreetmap/map-icons/master/svg/misc/landmark/peak_small.svg',
-    'https://raw.githubusercontent.com/openstreetmap/map-icons/master/svg/misc/landmark/works.svg'
-];
-
 // import {log} from 'log';
+
+const mapUrl = 'src/images/map.svg';
 
 class ViewArea extends Component {
     constructor(props) {
@@ -48,6 +46,7 @@ class ViewArea extends Component {
         };
 
         this.CSMParameters = {
+            enabled: true,
             splitCount: 4,
             splitLambda: 0.0,
             maxSplitDistances: [],
@@ -91,6 +90,7 @@ class ViewArea extends Component {
         this.debugScene = new THREE.Scene();
 
         const CSMParameters = function () {
+            this.enabled = true;
             this.splitCount = 4;
             this.splitType = "linear";
             this.splitLambda = 0.0;
@@ -113,6 +113,7 @@ class ViewArea extends Component {
         window.onload = function() {
             let parameters = new CSMParameters();
             let gui = new dat.GUI();
+            gui.add(parameters, 'enabled');
             gui.add(parameters, 'splitCount').min(1).max(refs.constants.maxSplitCount).step(1);
             gui.add(parameters, 'splitType', ["logarithmic", "linear", "mixed"]);
             gui.add(parameters, 'splitLambda').min(0.0).max(1.0).step(0.001);
@@ -120,7 +121,7 @@ class ViewArea extends Component {
             gui.add(parameters, 'displayBorders');
             gui.add(parameters, 'displayTextures');
             gui.add(parameters, 'addFrustum');
-            gui.add(parameters, 'textureResolution').min(512).max(2048).step(1);
+            gui.add(parameters, 'textureResolution').min(512).max(4096).step(1);
             gui.add(parameters, 'pushFar').min(0).max(4000).step(1);
             gui.add(parameters, 'stable');
             const stableCSMFolder = gui.addFolder('Stable CSM Parameters');
@@ -164,6 +165,7 @@ class ViewArea extends Component {
                     }
                 })
                 refs.CSMParameters.pushFar = parameters.pushFar;
+                refs.CSMParameters.enabled = parameters.enabled;
             };
             update();
         };
@@ -194,35 +196,37 @@ class ViewArea extends Component {
             const deltaTime = now - then;
             then = now;
 
-            // set composer renderer parameters
-            composer.renderer.setClearColor(new THREE.Color(1e9, -1e9, 0), 1);
-            composer.renderer.setViewport(0, 0, Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
+            if (this.CSMParameters.enabled) {
+                // set composer renderer parameters
+                composer.renderer.setClearColor(new THREE.Color(1e9, -1e9, 0), 1);
+                composer.renderer.setViewport(0, 0, Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
 
-            composer.render(deltaTime);
-            let pixels = new Float32Array(4);
-            composer.renderer.readRenderTargetPixels(composer.readBuffer, 0, 0, 1, 1, pixels);
-            this.calculateNearAndFar(pixels[0], pixels[1]);
+                composer.render(deltaTime);
+                let pixels = new Float32Array(4);
+                composer.renderer.readRenderTargetPixels(composer.readBuffer, 0, 0, 1, 1, pixels);
+                this.calculateNearAndFar(pixels[0], pixels[1]);
 
-            // restore default renderer parameters
-            renderer.setViewport(0, 0, canvas.width, canvas.height);
-            renderer.setClearColor(clearColor, clearAlpha);
+                // restore default renderer parameters
+                renderer.setViewport(0, 0, canvas.width, canvas.height);
+                renderer.setClearColor(clearColor, clearAlpha);
 
-            this.createOrthographicCameras();
-            this.createTextureMatrices();
+                this.createOrthographicCameras();
+                this.createTextureMatrices();
 
-            this.shaderMaterial.uniforms.displayBorders.value = this.displayBorders ? 1 : 0;
-            this.shaderMaterial.uniforms.splitCount.value = this.CSMParameters.splitCount;
-            this.shaderMaterial.uniforms.cascadesBlendingFactor.value = this.CSMParameters.cascadesBlendingFactor;
+                this.shaderMaterial.uniforms.displayBorders.value = this.displayBorders ? 1 : 0;
+                this.shaderMaterial.uniforms.splitCount.value = this.CSMParameters.splitCount;
+                this.shaderMaterial.uniforms.cascadesBlendingFactor.value = this.CSMParameters.cascadesBlendingFactor;
 
-            //renderer.render(this.bufferScene, this.orthographicCameras[0]);
-            for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
-                renderer.setRenderTarget(this.bufferTextures[i]);
-                renderer.render(this.bufferScene, this.orthographicCameras[i]);
+                //renderer.render(this.bufferScene, this.orthographicCameras[0]);
+                for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
+                    renderer.setRenderTarget(this.bufferTextures[i]);
+                    renderer.render(this.bufferScene, this.orthographicCameras[i]);
+                }
             }
 
+            this.shaderMaterial.uniforms.enableCSM.value = this.CSMParameters.enabled ? 1 : 0;
             renderer.setRenderTarget(null);
             renderer.render(this.scene, this.camera);
-
 
             if (this.displayTextures) {
                 this.debugScene.add(this.camera);
@@ -256,7 +260,7 @@ class ViewArea extends Component {
     createCamera(canvas, positionX, positionY, positionZ) {
         const fov = 45;
         const aspect = canvas.width / canvas.height;
-        const near = 0.1;
+        const near = 1;
         const far = 20000;
 
         let camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
@@ -266,7 +270,7 @@ class ViewArea extends Component {
     }
 
     createControls(canvas, camera) {
-        const controls = new THREE.OrbitControls(camera, canvas);
+        const controls = new OrbitControls(camera, canvas);
         /*controls.maxDistance = 4500;
         controls.maxPolarAngle = Math.PI / 2 - Math.PI / 8;
         controls.minDistance = 300;
@@ -310,7 +314,7 @@ class ViewArea extends Component {
 
         const textureLoader = new THREE.TextureLoader();
 
-        const bumpTexture = textureLoader.load(heightMapTexture);
+        const bumpTexture = textureLoader.load(DEMTexture);
         bumpTexture.wrapS = bumpTexture.wrapT = THREE.RepeatWrapping;
         const oceanTexture = textureLoader.load(waterTexture);
         oceanTexture.wrapS = oceanTexture.wrapT = THREE.RepeatWrapping;
@@ -322,6 +326,8 @@ class ViewArea extends Component {
         snowyTexture.wrapS = snowyTexture.wrapT = THREE.RepeatWrapping;
         const greenTexture = textureLoader.load(meadowTexture);
         greenTexture.wrapS = greenTexture.wrapT = THREE.RepeatWrapping;
+        const terrain = textureLoader.load(terrainTexture)
+        terrain.wrapS = terrain.wrapT = THREE.RepeatWrapping;
 
         this.shaderMaterial.uniforms = {
             bumpTexture: {type: "t", value: bumpTexture},
@@ -331,6 +337,7 @@ class ViewArea extends Component {
             grassTexture: {type: "t", value: greenTexture},
             rockyTexture: {type: "t", value: rockyTexture},
             snowyTexture: {type: "t", value: snowyTexture},
+            terrainTexture: {type: "t", value: terrain},
             //fogColor: {type: "c", value: this.scene.fog.color},
             //fogNear: {type: "f", value: this.scene.fog.near},
             //fogFar: {type: "f", value: this.scene.fog.far},
@@ -348,7 +355,8 @@ class ViewArea extends Component {
             },
             textureMatrices: {type: "m4v", value: new Array(this.constants.maxSplitCount).fill(new THREE.Matrix4())},
             displayBorders: {type: "i", value: 0},
-            cascadesBlendingFactor: {type: "f", value: this.CSMParameters.cascadesBlendingFactor}
+            cascadesBlendingFactor: {type: "f", value: this.CSMParameters.cascadesBlendingFactor},
+            enableCSM: {type: "i", value: 1}
         };
 
         const plane = new THREE.Mesh(geometry, this.shaderMaterial);
@@ -375,72 +383,7 @@ class ViewArea extends Component {
                 magFilter: THREE.NearestFilter
             });
         }
-
-        // add various points
-        loadSVGToScene(SVGSources[0], this.bufferScene, 300, 0, -900, -Math.PI / 2, 0, 0, 0.2, 0.2, 0.2);
-        loadSVGToScene(SVGSources[1], this.bufferScene, 100, 0, -600, -Math.PI / 2);
-        loadSVGToScene(SVGSources[2], this.bufferScene, -400, 0, 900, -Math.PI / 2, 0, 0, 5.0, 5.0, 5.0);
-        loadSVGToScene(SVGSources[3], this.bufferScene, -900, 0, 20, -Math.PI / 2);
-        loadSVGToScene(SVGSources[4], this.bufferScene, 500, 0, -600, -Math.PI / 2);
-
-        // add a line
-        const lineMaterial = new THREE.LineBasicMaterial({color: 0x0000ff, linewidth: 10});
-        const points = [];
-        points.push(new THREE.Vector3(2000, -500, 0));
-        points.push(new THREE.Vector3(0, -2000, 0));
-        points.push(new THREE.Vector3(-2000, 1300, 0));
-
-        const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
-        let line = new THREE.Line(lineGeometry, lineMaterial);
-        line.rotation.set(-Math.PI / 2, 0, 0);
-        this.bufferScene.add(line);
-
-
-        // add a polygon
-        let shape = new THREE.Shape(), vertices = [], x, n = 7;
-
-        // Calculate the vertices of the n-gon.
-        for (x = 1; x <= n; x++) {
-            vertices.push([
-                700 * Math.sin((Math.PI / n) + (x * ((2 * Math.PI) / n))),
-                700 * Math.cos((Math.PI / n) + (x * ((2 * Math.PI) / n)))
-            ]);
-        }
-
-        // Start at the last vertex.
-        shape.moveTo.apply(shape, vertices[n - 1]);
-
-        // Connect each vertex to the next in sequential order.
-        for (x = 0; x < n; x++) {
-            shape.lineTo.apply(shape, vertices[x]);
-        }
-
-        const geometry = new THREE.ShapeGeometry(shape);
-        const material = new THREE.MeshBasicMaterial({color: 0x00ff00});
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.set(700, 0, -1700);
-        mesh.rotation.set(-Math.PI / 2, 0, 0);
-        this.bufferScene.add( mesh );
-
-        // add circles
-        for (let i = 0; i < 5; ++i) {
-            for (let j = 0; j < 3; ++j) {
-                const geometry = new THREE.CircleGeometry(100, 256);
-                let color = new THREE.Color(0xffffff);
-                color.setHex(Math.random() * 0xffffff);
-                const material = new THREE.MeshBasicMaterial({color: color});
-                const mesh = new THREE.Mesh(geometry, material);
-                mesh.position.set(-600 + 300 * i, 0, -300 + 300 * j);
-                mesh.rotation.set(-Math.PI / 2, 0, 0);
-                this.bufferScene.add(mesh);
-            }
-        }
-
-        const bigCircleGeometry = new THREE.CircleGeometry(900, 64);
-        const bigCircleMesh = new THREE.Mesh(bigCircleGeometry, new THREE.MeshBasicMaterial({color: new THREE.Color('magenta')}));
-        bigCircleMesh.position.set(-1000, 0, 2000);
-        bigCircleMesh.rotation.set(-Math.PI / 2, 0, 0);
-        this.bufferScene.add(bigCircleMesh);
+        loadSVGToScene(mapUrl, this.bufferScene, -2900, 0, -3700, -Math.PI / 2, 0, 0, 2);
     }
 
     // same as CSM split, refactoring possible

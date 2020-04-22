@@ -1,8 +1,12 @@
-import * as THREE from "three-full";
+import * as THREE from "three";
+import {EffectComposer} from "three/examples/jsm/postprocessing/EffectComposer";
+import {RenderPass} from "three/examples/jsm/postprocessing/RenderPass";
+import {ShaderPass} from "three/examples/jsm/postprocessing/ShaderPass";
+
 import terrainPingPongVxShader from "../../shaders/terrain_ping_pong.vert";
 import terrainPingPongFragShader from "../../shaders/terrain_ping_pong.frag";
 
-class ShaderPassWithViewport extends THREE.ShaderPass {
+class ShaderPassWithViewport extends ShaderPass {
     render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
         let pixels = new Float32Array(4);
         renderer.readRenderTargetPixels(readBuffer, 0, 0, 1, 1, pixels);
@@ -24,9 +28,9 @@ ShaderPassWithViewport.prototype.width = -1;
 ShaderPassWithViewport.prototype.height = -1;
 
 export function setUpZCoordEffectsComposer(renderer, width, height, scene, camera) {
-    let composer = new THREE.EffectComposer(renderer, new THREE.WebGLRenderTarget(width, height, {type: THREE.FloatType}));
+    let composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(width, height, {type: THREE.FloatType}));
     composer.renderToScreen = false;
-    composer.addPass(new THREE.RenderPass(scene, camera));
+    composer.addPass(new RenderPass(scene, camera));
     let n = Math.ceil(Math.max(Math.log2(width), Math.log2(height)));
     // do n passes
     for (let i = 1; i <= n; i++) {

@@ -1,41 +1,87 @@
-import * as THREE from "three-full";
+import * as THREE from "three";
+import {SVGLoader} from "three/examples/jsm/loaders/SVGLoader";
 
 export function loadSVGToScene(url, scene,
                                posX = 0, posY = 0, posZ = 0,
                                rotationX = 0, rotationY = 0, rotationZ = 0,
-                               scaleX = 1, scaleY = 1, scaleZ = 1) {
-    const loader = new THREE.SVGLoader();
+                               scale) {
+    const loader = new SVGLoader();
 
     loader.load(
         url,
         function (data) {
-            const paths = data.paths === undefined ? data : data.paths;
-            const group = new THREE.Group();
+            const paths = data.paths;
+            console.log(data.paths);
 
-            for (let i = 0; i < paths.length; i++) {
+            const group = new THREE.Group();
+            group.scale.multiplyScalar(scale);
+            group.position.set(posX, posY, posZ);
+            group.scale.y *= - 1;
+            group.rotation.set(rotationX, rotationY, rotationZ);
+
+            for (let i = 0; i < paths.length; i ++ ) {
+
                 const path = paths[i];
 
-                const material = new THREE.MeshBasicMaterial({
-                    color: path.color,
-                    side: THREE.DoubleSide,
-                    depthWrite: false
-                });
+                const fillColor = path.userData.style.fill;
+                if ( fillColor !== undefined && fillColor !== 'none' ) {
 
-                const shapes = path.toShapes(true);
+                    var material = new THREE.MeshBasicMaterial( {
+                        color: new THREE.Color().setStyle( fillColor ),
+                        opacity: path.userData.style.fillOpacity,
+                        transparent: path.userData.style.fillOpacity < 1,
+                        side: THREE.DoubleSide,
+                        depthWrite: false
+                    } );
 
-                for (let j = 0; j < shapes.length; j++) {
-                    const shape = shapes[j];
-                    const geometry = new THREE.ShapeBufferGeometry(shape);
-                    const mesh = new THREE.Mesh(geometry, material);
-                    group.add(mesh);
+                    var shapes = path.toShapes( true );
+
+                    for ( var j = 0; j < shapes.length; j ++ ) {
+
+                        var shape = shapes[ j ];
+
+                        var geometry = new THREE.ShapeBufferGeometry( shape );
+                        var mesh = new THREE.Mesh( geometry, material );
+
+                        group.add( mesh );
+
+                    }
+
                 }
+
+                var strokeColor = path.userData.style.stroke;
+
+                if ( strokeColor !== undefined && strokeColor !== 'none' ) {
+
+                    var material = new THREE.MeshBasicMaterial( {
+                        color: new THREE.Color().setStyle( strokeColor ),
+                        opacity: path.userData.style.strokeOpacity,
+                        transparent: path.userData.style.strokeOpacity < 1,
+                        side: THREE.DoubleSide,
+                        depthWrite: false
+                    } );
+
+                    for ( var j = 0, jl = path.subPaths.length; j < jl; j ++ ) {
+
+                        var subPath = path.subPaths[ j ];
+
+                        var geometry = SVGLoader.pointsToStroke( subPath.getPoints(), path.userData.style );
+
+                        if ( geometry ) {
+
+                            var mesh = new THREE.Mesh( geometry, material );
+
+                            group.add( mesh );
+
+                        }
+
+                    }
+
+                }
+
             }
 
-            group.rotation.set(rotationX, rotationY, rotationZ);
-            group.position.set(posX, posY, posZ);
-            group.scale.set(scaleX, scaleY, scaleZ);
-
-            scene.add(group);
+            scene.add( group );
 
         },
         function (xhr) {

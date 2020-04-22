@@ -5,6 +5,7 @@ uniform sampler2D sandyTexture;
 uniform sampler2D grassTexture;
 uniform sampler2D rockyTexture;
 uniform sampler2D snowyTexture;
+uniform sampler2D terrainTexture;
 
 uniform sampler2D vectorsTextures[MAX_SPLITS];
 uniform int splitCount;
@@ -12,6 +13,7 @@ uniform int splitCount;
 uniform float cascadesBlendingFactor;
 
 uniform int displayBorders;
+uniform int enableCSM;
 
 uniform vec3 fogColor;
 uniform float fogNear;
@@ -91,30 +93,36 @@ void main() {
 
   vec4 color = vec4(-1.0, 0.0, 0.0, 0.0);
 
-  for (int i = 0; i < MAX_SPLITS; ++i) {
-    if (i >= splitCount) {
-      break;
-    }
-    vec3 projected_c = projected_texcoords[i].xyz / projected_texcoords[i].w;
-    if (get_projected_texture_color(projected_texcoords[i], i, color)) {
-
-      if (projected_c.x <= 1.0 && projected_c.x >= 1.0 - cascadesBlendingFactor ||
-          projected_c.y <= 1.0 && projected_c.y >= 1.0 - cascadesBlendingFactor ||
-          projected_c.x >= -1.0 && projected_c.x <= -1.0 + cascadesBlendingFactor ||
-          projected_c.y >= -1.0 && projected_c.y <= -1.0 + cascadesBlendingFactor) {
-        vec4 next_split_color = vec4(-1.0, 0.0, 0.0, 0.0);
-        // this adds image artifacts
-        if (i + 1 < splitCount && get_projected_texture_color(projected_texcoords[i + 1], i + 1, next_split_color)) {
-          color = mix(color, next_split_color, 0.5);
-        }
+  if (enableCSM == 1) {
+    for (int i = 0; i < MAX_SPLITS; ++i) {
+      if (i >= splitCount) {
+        break;
       }
+      vec3 projected_c = projected_texcoords[i].xyz / projected_texcoords[i].w;
+      if (get_projected_texture_color(projected_texcoords[i], i, color)) {
 
-      break;
+        if (projected_c.x <= 1.0 && projected_c.x >= 1.0 - cascadesBlendingFactor ||
+        projected_c.y <= 1.0 && projected_c.y >= 1.0 - cascadesBlendingFactor ||
+        projected_c.x >= -1.0 && projected_c.x <= -1.0 + cascadesBlendingFactor ||
+        projected_c.y >= -1.0 && projected_c.y <= -1.0 + cascadesBlendingFactor) {
+          vec4 next_split_color = vec4(-1.0, 0.0, 0.0, 0.0);
+          // this adds image artifacts
+          if (i + 1 < splitCount && get_projected_texture_color(projected_texcoords[i + 1], i + 1, next_split_color)) {
+            color = mix(color, next_split_color, 0.5);
+          }
+        }
+
+        break;
+      }
     }
+
   }
 
+
+
   if (color.x == -1.0 || color.w == 0.0) {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0) + water + sandy + grass + rocky + snowy;
+    //gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0) + water + sandy + grass + rocky + snowy;
+    gl_FragColor = texture2D(terrainTexture, vUV);
   } else {
     gl_FragColor = color;
   }
