@@ -2,6 +2,7 @@ import React, {Component} from "react";
 import * as THREE from 'three';
 import {OrbitControls} from "three/examples/jsm/controls/OrbitControls";
 import * as dat from 'dat.gui'
+import Stats from 'stats-js';
 
 import vxShader from '../../shaders/main.vert';
 import fragShader from '../../shaders/main.frag';
@@ -192,6 +193,9 @@ class ViewArea extends Component {
         const clearAlpha = renderer.getClearAlpha();
         let composer = setUpZCoordEffectsComposer(renderer, canvas.width, canvas.height, this.zScene, this.camera);
 
+        let stats = new Stats();
+        document.body.appendChild( stats.domElement )
+
         let then = 0;
         const renderLoopTick = (now) => {
             this.debugCount++;
@@ -239,6 +243,8 @@ class ViewArea extends Component {
             } else {
                 this.debugScene.remove(this.camera);
             }
+
+            stats.update();
 
             requestAnimationFrame(renderLoopTick);
         };
