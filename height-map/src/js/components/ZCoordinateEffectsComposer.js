@@ -8,9 +8,6 @@ import terrainPingPongFragShader from "../../shaders/terrain_ping_pong.frag";
 
 class ShaderPassWithViewport extends ShaderPass {
     render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
-        let pixels = new Float32Array(4);
-        renderer.readRenderTargetPixels(readBuffer, 0, 0, 1, 1, pixels);
-
         if (this.width === -1 || this.height === -1) {
             let v = new THREE.Vector4();
             renderer.getCurrentViewport(v);

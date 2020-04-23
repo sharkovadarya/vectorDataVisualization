@@ -204,19 +204,20 @@ class ViewArea extends Component {
             then = now;
 
             if (this.CSMParameters.enabled) {
-                // set composer renderer parameters
-                composer.renderer.setClearColor(new THREE.Color(1e9, -1e9, 0), 1);
-                composer.renderer.setViewport(0, 0, Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
+                if (!this.stableCSMParameters.enabled) {
+                    // set composer renderer parameters
+                    composer.renderer.setClearColor(new THREE.Color(1e9, -1e9, 0), 1);
+                    composer.renderer.setViewport(0, 0, Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
 
-                composer.render(deltaTime);
-                let pixels = new Float32Array(4);
-                composer.renderer.readRenderTargetPixels(composer.readBuffer, 0, 0, 1, 1, pixels);
-                this.calculateNearAndFar(pixels[0], pixels[1]);
+                    composer.render(deltaTime);
+                    let pixels = new Float32Array(4);
+                    composer.renderer.readRenderTargetPixels(composer.readBuffer, 0, 0, 1, 1, pixels);
+                    this.calculateNearAndFar(pixels[0], pixels[1]);
 
-                // restore default renderer parameters
-                renderer.setViewport(0, 0, canvas.width, canvas.height);
-                renderer.setClearColor(clearColor, clearAlpha);
-
+                    // restore default renderer parameters
+                    renderer.setViewport(0, 0, canvas.width, canvas.height);
+                    renderer.setClearColor(clearColor, clearAlpha);
+                }
                 this.createOrthographicCameras();
                 this.createTextureMatrices();
 
