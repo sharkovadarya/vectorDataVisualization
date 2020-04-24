@@ -11,7 +11,6 @@ export function loadSVGToScene(url, scene,
         url,
         function (data) {
             const paths = data.paths;
-            console.log(data.paths);
 
             const group = new THREE.Group();
             group.scale.multiplyScalar(scale);
