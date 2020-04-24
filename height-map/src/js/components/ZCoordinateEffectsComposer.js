@@ -24,17 +24,18 @@ class ShaderPassWithViewport extends ShaderPass {
 ShaderPassWithViewport.prototype.width = -1;
 ShaderPassWithViewport.prototype.height = -1;
 
-export function setUpZCoordEffectsComposer(renderer, width, height, scene, camera) {
+export function setUpZCoordEffectsComposer(renderer, width, height, scene, camera, passesCount) {
     let composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(width, height, {type: THREE.FloatType}));
     composer.renderToScreen = false;
     composer.addPass(new RenderPass(scene, camera));
-    let n = Math.ceil(Math.max(Math.log2(width), Math.log2(height)));
+    let n = passesCount === undefined ? Math.ceil(Math.max(Math.log2(width), Math.log2(height))) : passesCount;
     // do n passes
     for (let i = 1; i <= n; i++) {
         const viewportWidth = Math.ceil(width / Math.pow(2, i));
         const viewportHeight = Math.ceil(height / Math.pow(2, i));
         const textureWidth = Math.ceil(width / Math.pow(2, i - 1));
         const textureHeight = Math.ceil(height / Math.pow(2, i - 1));
+
         const shader = {
             uniforms: {
                 tDiffuse: null,

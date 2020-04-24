@@ -55,7 +55,8 @@ class ViewArea extends Component {
             far: 20000,
             textureResolution: 512,
             cascadesBlendingFactor: 0.1,
-            pushFar: 500
+            pushFar: 500,
+            passesCount: 5
         };
 
         this.stableCSMParameters = {
@@ -103,6 +104,7 @@ class ViewArea extends Component {
             this.projectedAreaSide = 5000;
             this.cascadesBlendingFactor = 0.1;
             this.pushFar = 500;
+            this.passesCount = refs.CSMParameters.passesCount;
             this.addFrustum = function() {
                 refs.scene.add(new THREE.CameraHelper(refs.camera.clone()));
                 for (let i = 0; i < refs.CSMParameters.splitCount; i++) {
@@ -127,6 +129,7 @@ class ViewArea extends Component {
             gui.add(parameters, 'addFrustum');
             gui.add(parameters, 'textureResolution').min(512).max(4096).step(1);
             gui.add(parameters, 'pushFar').min(0).max(4000).step(1);
+            gui.add(parameters, 'passesCount').min(1).max(refs.CSMParameters.passesCount).step(1);
             gui.add(parameters, 'stable');
             const stableCSMFolder = gui.addFolder('Stable CSM Parameters');
             stableCSMFolder.add(parameters, 'firstTextureSize').min(50).max(1000).step(1);
@@ -170,6 +173,12 @@ class ViewArea extends Component {
                 })
                 refs.CSMParameters.pushFar = parameters.pushFar;
                 refs.CSMParameters.enabled = parameters.enabled;
+                if (parameters.passesCount !== refs.CSMParameters.passesCount) {
+                    const size = new THREE.Vector2();
+                    refs.composer.renderer.getSize(size);
+                    refs.composer = setUpZCoordEffectsComposer(refs.composer.renderer, size.width, size.height, refs.zScene, refs.camera, parameters.passesCount);
+                    refs.CSMParameters.passesCount = parameters.passesCount;
+                }
             };
             update();
         };
@@ -191,7 +200,8 @@ class ViewArea extends Component {
         const renderer = this.createRenderer(canvas);
         const clearColor = renderer.getClearColor();
         const clearAlpha = renderer.getClearAlpha();
-        let composer = setUpZCoordEffectsComposer(renderer, canvas.width, canvas.height, this.zScene, this.camera);
+        this.CSMParameters.passesCount = Math.ceil(Math.max(Math.log2(canvas.width), Math.log2(canvas.height)));
+        this.composer = setUpZCoordEffectsComposer(renderer, canvas.width, canvas.height, this.zScene, this.camera, this.CSMParameters.passesCount);
 
         let stats = new Stats();
         document.body.appendChild( stats.domElement )
@@ -206,13 +216,15 @@ class ViewArea extends Component {
             if (this.CSMParameters.enabled) {
                 if (!this.stableCSMParameters.enabled) {
                     // set composer renderer parameters
-                    composer.renderer.setClearColor(new THREE.Color(1e9, -1e9, 0), 1);
-                    composer.renderer.setViewport(0, 0, Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
+                    this.composer.renderer.setClearColor(new THREE.Color(1e9, -1e9, 0), 1);
+                    this.composer.renderer.setViewport(0, 0, Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
 
-                    composer.render(deltaTime);
-                    let pixels = new Float32Array(4);
-                    composer.renderer.readRenderTargetPixels(composer.readBuffer, 0, 0, 1, 1, pixels);
-                    this.calculateNearAndFar(pixels[0], pixels[1]);
+                    this.composer.render(deltaTime);
+                    let lastPass = this.composer.passes[this.composer.passes.length - 1];
+                    let textureSize = lastPass.uniforms.textureSize.value.clone().multiplyScalar(0.5).ceil();
+                    let pixels = new Float32Array(4 * textureSize.width * textureSize.height);
+                    this.composer.renderer.readRenderTargetPixels(this.composer.readBuffer, 0, 0, textureSize.width, textureSize.height, pixels);
+                    this.calculateNearAndFar(pixels);
 
                     // restore default renderer parameters
                     renderer.setViewport(0, 0, canvas.width, canvas.height);
@@ -465,9 +477,15 @@ class ViewArea extends Component {
         }
     }
 
-    calculateNearAndFar(zMinValue, zMaxValue) {
-        this.CSMParameters.near = -zMaxValue;
-        this.CSMParameters.far = -zMinValue + this.CSMParameters.pushFar;
+    calculateNearAndFar(pixels) {
+        let minValue = Number.POSITIVE_INFINITY;
+        let maxValue = Number.NEGATIVE_INFINITY;
+        for (let i = 0; i < pixels.length; i += 4) {
+            minValue = Math.min(minValue, -pixels[i + 1]);
+            maxValue = Math.max(maxValue, -pixels[i]);
+        }
+        this.CSMParameters.near = minValue;
+        this.CSMParameters.far = maxValue + this.CSMParameters.pushFar;
     }
 }
 
