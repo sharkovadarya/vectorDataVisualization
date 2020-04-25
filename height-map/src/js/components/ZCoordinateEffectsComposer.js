@@ -24,22 +24,33 @@ class ShaderPassWithViewport extends ShaderPass {
 ShaderPassWithViewport.prototype.width = -1;
 ShaderPassWithViewport.prototype.height = -1;
 
-export function setUpZCoordEffectsComposer(renderer, width, height, scene, camera, passesCount) {
+const maxFactor = 5;
+
+export function setUpZCoordEffectsComposer(renderer, width, height, scene, camera, passesCount, factor) {
     let composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(width, height, {type: THREE.FloatType}));
     composer.renderToScreen = false;
     composer.addPass(new RenderPass(scene, camera));
-    let n = passesCount === undefined ? Math.ceil(Math.max(Math.log2(width), Math.log2(height))) : passesCount;
+    let n = passesCount === undefined ? calculatePassesCount(width, height, factor) : passesCount;
     // do n passes
     for (let i = 1; i <= n; i++) {
-        const viewportWidth = Math.ceil(width / Math.pow(2, i));
-        const viewportHeight = Math.ceil(height / Math.pow(2, i));
-        const textureWidth = Math.ceil(width / Math.pow(2, i - 1));
-        const textureHeight = Math.ceil(height / Math.pow(2, i - 1));
+        const viewportWidth = Math.ceil(width / Math.pow(factor, i));
+        const viewportHeight = Math.ceil(height / Math.pow(factor, i));
+        const textureWidth = Math.ceil(width / Math.pow(factor, i - 1));
+        const textureHeight = Math.ceil(height / Math.pow(factor, i - 1));
+
+        let directions = new Array(maxFactor * maxFactor).fill(new THREE.Vector2());
+        for (let i = 0; i < factor; i++) {
+            for (let j = 0; j < factor; j++) {
+                directions[i * factor + j] = new THREE.Vector2(i, j);
+            }
+        }
 
         const shader = {
             uniforms: {
                 tDiffuse: null,
-                textureSize: {value: new THREE.Vector2(textureWidth, textureHeight)}
+                textureSize: {value: new THREE.Vector2(textureWidth, textureHeight)},
+                directions: {value: directions},
+                previousTextureFactor: {value: factor}
             },
             vertexShader: terrainPingPongVxShader,
             fragmentShader: terrainPingPongFragShader
@@ -50,5 +61,13 @@ export function setUpZCoordEffectsComposer(renderer, width, height, scene, camer
         composer.addPass(pass);
     }
     return composer;
+}
+
+export function calculatePassesCount(width, height, factor) {
+    return Math.ceil(Math.max(log(width, factor), log(height, factor)))
+}
+
+function log(value, base) {
+    return Math.log(value) / Math.log(base);
 }
 

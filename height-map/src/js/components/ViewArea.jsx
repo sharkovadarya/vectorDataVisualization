@@ -23,7 +23,7 @@ import terrainTexture from '../../textures/terrainTexture.jpg'
 import {connect} from 'react-redux'
 
 import './ZCoordinateEffectsComposer';
-import {setUpZCoordEffectsComposer} from "./ZCoordinateEffectsComposer";
+import {calculatePassesCount, setUpZCoordEffectsComposer} from "./ZCoordinateEffectsComposer";
 import './CSMFrustumSplit'
 import {
     calculateMaxSplitDistances,
@@ -56,7 +56,8 @@ class ViewArea extends Component {
             textureResolution: 512,
             cascadesBlendingFactor: 0.1,
             pushFar: 500,
-            passesCount: 5
+            passesCount: 5,
+            passesFactor: 2
         };
 
         this.stableCSMParameters = {
@@ -105,6 +106,7 @@ class ViewArea extends Component {
             this.cascadesBlendingFactor = 0.1;
             this.pushFar = 500;
             this.passesCount = refs.CSMParameters.passesCount;
+            this.passesFactor = refs.CSMParameters.passesFactor;
             this.addFrustum = function() {
                 refs.scene.add(new THREE.CameraHelper(refs.camera.clone()));
                 for (let i = 0; i < refs.CSMParameters.splitCount; i++) {
@@ -130,6 +132,7 @@ class ViewArea extends Component {
             gui.add(parameters, 'textureResolution').min(512).max(4096).step(1);
             gui.add(parameters, 'pushFar').min(0).max(4000).step(1);
             gui.add(parameters, 'passesCount').min(1).max(refs.CSMParameters.passesCount).step(1);
+            gui.add(parameters, 'passesFactor').min(2).max(5).step(1);
             gui.add(parameters, 'stable');
             const stableCSMFolder = gui.addFolder('Stable CSM Parameters');
             stableCSMFolder.add(parameters, 'firstTextureSize').min(50).max(1000).step(1);
@@ -173,11 +176,14 @@ class ViewArea extends Component {
                 })
                 refs.CSMParameters.pushFar = parameters.pushFar;
                 refs.CSMParameters.enabled = parameters.enabled;
-                if (parameters.passesCount !== refs.CSMParameters.passesCount) {
+                if (parameters.passesCount !== refs.CSMParameters.passesCount || parameters.passesFactor !== refs.CSMParameters.passesFactor) {
                     const size = new THREE.Vector2();
                     refs.composer.renderer.getSize(size);
-                    refs.composer = setUpZCoordEffectsComposer(refs.composer.renderer, size.width, size.height, refs.zScene, refs.camera, parameters.passesCount);
-                    refs.CSMParameters.passesCount = parameters.passesCount;
+                    let passesCount = Math.min(parameters.passesCount, calculatePassesCount(size.width, size.height, parameters.passesFactor));
+                    refs.composer = setUpZCoordEffectsComposer(refs.composer.renderer, size.width, size.height, refs.zScene, refs.camera, passesCount, parameters.passesFactor);
+                    refs.CSMParameters.passesCount = passesCount;
+                    parameters.passesCount = passesCount;
+                    refs.CSMParameters.passesFactor = parameters.passesFactor;
                 }
             };
             update();
@@ -200,8 +206,8 @@ class ViewArea extends Component {
         const renderer = this.createRenderer(canvas);
         const clearColor = renderer.getClearColor();
         const clearAlpha = renderer.getClearAlpha();
-        this.CSMParameters.passesCount = Math.ceil(Math.max(Math.log2(canvas.width), Math.log2(canvas.height)));
-        this.composer = setUpZCoordEffectsComposer(renderer, canvas.width, canvas.height, this.zScene, this.camera, this.CSMParameters.passesCount);
+        this.CSMParameters.passesCount = calculatePassesCount(canvas.width, canvas.height, this.CSMParameters.passesFactor);
+        this.composer = setUpZCoordEffectsComposer(renderer, canvas.width, canvas.height, this.zScene, this.camera, this.CSMParameters.passesCount, this.CSMParameters.passesFactor);
 
         let stats = new Stats();
         document.body.appendChild( stats.domElement )
@@ -221,7 +227,7 @@ class ViewArea extends Component {
 
                     this.composer.render(deltaTime);
                     let lastPass = this.composer.passes[this.composer.passes.length - 1];
-                    let textureSize = lastPass.uniforms.textureSize.value.clone().multiplyScalar(0.5).ceil();
+                    let textureSize = lastPass.uniforms.textureSize.value.clone().divideScalar(this.CSMParameters.passesFactor).ceil();
                     let pixels = new Float32Array(4 * textureSize.width * textureSize.height);
                     this.composer.renderer.readRenderTargetPixels(this.composer.readBuffer, 0, 0, textureSize.width, textureSize.height, pixels);
                     this.calculateNearAndFar(pixels);
