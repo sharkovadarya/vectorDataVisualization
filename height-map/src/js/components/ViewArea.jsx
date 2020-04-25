@@ -2,7 +2,10 @@ import React, {Component} from "react";
 import * as THREE from 'three';
 import {OrbitControls} from "three/examples/jsm/controls/OrbitControls";
 import * as dat from 'dat.gui'
-import Stats from 'stats-js';
+import $ from 'jquery';
+
+// this is stats-js but with an additional public field
+import Stats from './FPSStats';
 
 import vxShader from '../../shaders/main.vert';
 import fragShader from '../../shaders/main.frag';
@@ -52,7 +55,7 @@ class ViewArea extends Component {
             splitLambda: 0.0,
             maxSplitDistances: [],
             near: 1,
-            far: 20000,
+            far: 10000,
             textureResolution: 512,
             cascadesBlendingFactor: 0.1,
             pushFar: 500,
@@ -92,6 +95,16 @@ class ViewArea extends Component {
 
         this.debugScene = new THREE.Scene();
 
+        this.performanceTestParameters = {
+            running: false,
+            testCameraData: {
+                positions: [],
+                rotations: []
+            },
+            testCameraDataIndex: 0,
+            passesParameters: []
+        }
+
         const CSMParameters = function () {
             this.enabled = true;
             this.splitCount = 4;
@@ -113,6 +126,33 @@ class ViewArea extends Component {
                     refs.scene.add(new THREE.CameraHelper(refs.orthographicCameras[i].clone()));
                 }
             };
+            this.runPerformanceTest = function() {
+                $.getJSON("src/json/camera.json", function(json) {
+                    // we know its format
+                    // threejs doesn't have vector parsing apparently
+                    function parseVector3JSON(v) {
+                        if (v._x !== undefined) {
+                            return new THREE.Vector3(v._x, v._y, v._z);
+                        } else if (v.x !== undefined) {
+                            return new THREE.Vector3(v.x, v.y, v.z);
+                        }
+                    }
+
+                    refs.performanceTestParameters.testCameraDataIndex = 0;
+                    if (refs.performanceTestParameters.testCameraData.rotations.length === 0 || refs.performanceTestParameters.testCameraData.positions.length === 0) {
+                        let data = json.data;
+                        for (let i = 0; i < data.length; i += 2) {
+                            refs.performanceTestParameters.testCameraData.rotations.push(parseVector3JSON(data[i]));
+                            refs.performanceTestParameters.testCameraData.positions.push(parseVector3JSON(data[i + 1]));
+                        }
+                    }
+
+                    refs.CSMParameters.passesCount = refs.performanceTestParameters.passesParameters[0].passesCount;
+                    refs.CSMParameters.passesFactor = refs.performanceTestParameters.passesParameters[0].passesFactor;
+
+                    refs.performanceTestParameters.running = true;
+                });
+            }
         };
 
         this.debugCount = 0;
@@ -121,6 +161,7 @@ class ViewArea extends Component {
         window.onload = function() {
             let parameters = new CSMParameters();
             let gui = new dat.GUI();
+
             gui.add(parameters, 'enabled');
             gui.add(parameters, 'splitCount').min(1).max(refs.constants.maxSplitCount).step(1);
             gui.add(parameters, 'splitType', ["logarithmic", "linear", "mixed"]);
@@ -129,6 +170,7 @@ class ViewArea extends Component {
             gui.add(parameters, 'displayBorders');
             gui.add(parameters, 'displayTextures');
             gui.add(parameters, 'addFrustum');
+            gui.add(parameters, 'runPerformanceTest');
             gui.add(parameters, 'textureResolution').min(512).max(4096).step(1);
             gui.add(parameters, 'pushFar').min(0).max(4000).step(1);
             gui.add(parameters, 'passesCount').min(1).max(refs.CSMParameters.passesCount).step(1);
@@ -137,6 +179,19 @@ class ViewArea extends Component {
             const stableCSMFolder = gui.addFolder('Stable CSM Parameters');
             stableCSMFolder.add(parameters, 'firstTextureSize').min(50).max(1000).step(1);
             stableCSMFolder.add(parameters, 'projectedAreaSide').min(5000).max(30000).step(100);
+
+
+            let PassParameters = function(factor = -1, count = -1) {
+                this.passesFactor = factor;
+                this.passesCount = count;
+            };
+            for (let i = 2; i <= 5; i++) {
+                const maxSize = calculatePassesCount(window.innerWidth, window.innerHeight, i);
+                for (let j = 1; j <= maxSize; j++) {
+                    refs.performanceTestParameters.passesParameters.push(new PassParameters(i, j));
+                }
+            }
+            refs.performanceTestParameters.passesParametersIndex = 0;
 
             let update = function () {
                 requestAnimationFrame(update);
@@ -171,12 +226,13 @@ class ViewArea extends Component {
                 refs.stableCSMParameters.projectedAreaSide = parameters.projectedAreaSide;
                 refs.bufferTextures.forEach(function (t) {
                     if (t !== null) {
-                        t.setSize(parameters.textureResolution, parameters.textureResolution);
+                        t = new THREE.WebGLRenderTarget(parameters.textureResolution, parameters.textureResolution);
+                        //t.setSize();
                     }
                 })
                 refs.CSMParameters.pushFar = parameters.pushFar;
                 refs.CSMParameters.enabled = parameters.enabled;
-                if (parameters.passesCount !== refs.CSMParameters.passesCount || parameters.passesFactor !== refs.CSMParameters.passesFactor) {
+                if (!refs.performanceTestParameters.running && (parameters.passesCount !== refs.CSMParameters.passesCount || parameters.passesFactor !== refs.CSMParameters.passesFactor)) {
                     const size = new THREE.Vector2();
                     refs.composer.renderer.getSize(size);
                     let passesCount = Math.min(parameters.passesCount, calculatePassesCount(size.width, size.height, parameters.passesFactor));
@@ -210,14 +266,41 @@ class ViewArea extends Component {
         this.composer = setUpZCoordEffectsComposer(renderer, canvas.width, canvas.height, this.zScene, this.camera, this.CSMParameters.passesCount, this.CSMParameters.passesFactor);
 
         let stats = new Stats();
-        document.body.appendChild( stats.domElement )
+        document.body.appendChild(stats.domElement);
 
         let then = 0;
+        let fpsSum = 0, fpsCount = 0;
         const renderLoopTick = (now) => {
             this.debugCount++;
             now *= 0.001;
             const deltaTime = now - then;
             then = now;
+
+            if (this.performanceTestParameters.running) {
+                let pos = this.performanceTestParameters.testCameraData.positions[this.performanceTestParameters.testCameraDataIndex];
+                let rotation = this.performanceTestParameters.testCameraData.rotations[this.performanceTestParameters.testCameraDataIndex]
+
+                fpsSum += stats.fps;
+                fpsCount++;
+                this.camera.position.set(pos.x, pos.y, pos.z);
+                this.camera.rotation.set(rotation.x, rotation.y, rotation.z);
+                this.performanceTestParameters.testCameraDataIndex++;
+                if (this.performanceTestParameters.testCameraDataIndex === this.performanceTestParameters.testCameraData.positions.length) {
+                    this.performanceTestParameters.passesParametersIndex++;
+                    console.log("Average FPS for factor ", this.CSMParameters.passesFactor, ", count ", this.CSMParameters.passesCount, " : ", fpsSum / fpsCount);
+                    if (this.performanceTestParameters.passesParametersIndex >= this.performanceTestParameters.passesParameters.length) {
+                        this.performanceTestParameters.running = false;
+                    } else {
+                        let param = this.performanceTestParameters.passesParameters[this.performanceTestParameters.passesParametersIndex];
+                        this.CSMParameters.passesFactor = param.passesFactor;
+                        this.CSMParameters.passesCount = param.passesCount;
+                        this.composer = setUpZCoordEffectsComposer(this.composer.renderer, canvas.width, canvas.height, this.zScene, this.camera, this.CSMParameters.passesCount, this.CSMParameters.passesFactor);
+                    }
+                    fpsSum = 0;
+                    fpsCount = 0;
+                    this.performanceTestParameters.testCameraDataIndex = 0;
+                }
+            }
 
             if (this.CSMParameters.enabled) {
                 if (!this.stableCSMParameters.enabled) {
@@ -289,7 +372,7 @@ class ViewArea extends Component {
         const fov = 45;
         const aspect = canvas.width / canvas.height;
         const near = 1;
-        const far = 20000;
+        const far = 10000;
 
         let camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
         camera.position.set(positionX, positionY, positionZ);
@@ -398,6 +481,12 @@ class ViewArea extends Component {
                 bumpScale: {type: "f", value: this.constants.terrainBumpScale}
             }
         });
+
+        plane.matrixAutoUpdate = false;
+        renderPlane.matrixAutoUpdate = false;
+        plane.updateMatrix();
+        renderPlane.updateMatrix();
+
         this.scene.add(plane);
         this.zScene.add(renderPlane);
 
