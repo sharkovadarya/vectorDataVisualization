@@ -12,6 +12,8 @@ varying float vAmount;
 varying vec2 vUV;
 varying vec3 pos;
 
+varying vec4 posWS;
+
 varying vec4 projected_texcoords[MAX_SPLITS];
 
 void main()
@@ -32,6 +34,8 @@ void main()
     }
     projected_texcoords[i] = textureMatrices[i] * modelMatrix * pos4;
   }
+
+  posWS = modelMatrix * pos4;
 
 
   //gl_Position = projectionMatrix * modelViewMatrix * pos4;

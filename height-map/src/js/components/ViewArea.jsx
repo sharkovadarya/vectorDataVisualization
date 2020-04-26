@@ -60,7 +60,9 @@ class ViewArea extends Component {
             cascadesBlendingFactor: 0.1,
             pushFar: 500,
             passesCount: 5,
-            passesFactor: 2
+            passesFactor: 2,
+            displayPixelAreas: false,
+            pixelAreaFactor: 100000
         };
 
         this.stableCSMParameters = {
@@ -153,6 +155,8 @@ class ViewArea extends Component {
                     refs.performanceTestParameters.running = true;
                 });
             }
+            this.displayPixelAreas = false;
+            this.pixelAreaFactor = 100000;
         };
 
         this.debugCount = 0;
@@ -179,6 +183,8 @@ class ViewArea extends Component {
             const stableCSMFolder = gui.addFolder('Stable CSM Parameters');
             stableCSMFolder.add(parameters, 'firstTextureSize').min(50).max(1000).step(1);
             stableCSMFolder.add(parameters, 'projectedAreaSide').min(5000).max(30000).step(100);
+            gui.add(parameters, 'displayPixelAreas');
+            gui.add(parameters, 'pixelAreaFactor').min(1000.0).max(1000000.0);
 
 
             let PassParameters = function(factor = -1, count = -1) {
@@ -241,6 +247,15 @@ class ViewArea extends Component {
                     parameters.passesCount = passesCount;
                     refs.CSMParameters.passesFactor = parameters.passesFactor;
                 }
+                if (parameters.displayPixelAreas !== refs.CSMParameters.displayPixelAreas) {
+                    refs.CSMParameters.displayPixelAreas = parameters.displayPixelAreas;
+                    refs.shaderMaterial.uniforms.displayPixelAreas.value = parameters.displayPixelAreas ? 1 : 0;
+                }
+                if (parameters.pixelAreaFactor !== refs.CSMParameters.pixelAreaFactor) {
+                    refs.CSMParameters.pixelAreaFactor = parameters.pixelAreaFactor;
+                    refs.shaderMaterial.uniforms.pixelAreaFactor.value = parameters.pixelAreaFactor;
+                }
+
             };
             update();
         };
@@ -267,6 +282,8 @@ class ViewArea extends Component {
 
         let stats = new Stats();
         document.body.appendChild(stats.domElement);
+
+        let debugTarget = new THREE.WebGLRenderTarget(canvas.width, canvas.height);
 
         let then = 0;
         let fpsSum = 0, fpsCount = 0;
@@ -334,8 +351,18 @@ class ViewArea extends Component {
             }
 
             this.shaderMaterial.uniforms.enableCSM.value = this.CSMParameters.enabled ? 1 : 0;
+
+            renderer.setRenderTarget(debugTarget);
+            renderer.render(this.scene, this.camera);
+            let pixels = new Uint8Array(4 * 16 * 8);
+            renderer.readRenderTargetPixels(debugTarget, canvas.width / 2, canvas.height / 2, 16, 8, pixels);
+            console.log(pixels);
+
+
             renderer.setRenderTarget(null);
             renderer.render(this.scene, this.camera);
+
+
 
             if (this.displayTextures) {
                 this.debugScene.add(this.camera);
@@ -427,34 +454,13 @@ class ViewArea extends Component {
 
         const bumpTexture = textureLoader.load(DEMTexture);
         bumpTexture.wrapS = bumpTexture.wrapT = THREE.RepeatWrapping;
-        const oceanTexture = textureLoader.load(waterTexture);
-        oceanTexture.wrapS = oceanTexture.wrapT = THREE.RepeatWrapping;
-        const sandyTexture = textureLoader.load(sandTexture);
-        sandyTexture.wrapS = sandyTexture.wrapT = THREE.RepeatWrapping;
-        const rockyTexture = textureLoader.load(rockTexture);
-        rockyTexture.wrapS = rockyTexture.wrapT = THREE.RepeatWrapping;
-        const snowyTexture = textureLoader.load(snowTexture);
-        snowyTexture.wrapS = snowyTexture.wrapT = THREE.RepeatWrapping;
-        const greenTexture = textureLoader.load(meadowTexture);
-        greenTexture.wrapS = greenTexture.wrapT = THREE.RepeatWrapping;
         const terrain = textureLoader.load(terrainTexture)
         terrain.wrapS = terrain.wrapT = THREE.RepeatWrapping;
 
         this.shaderMaterial.uniforms = {
             bumpTexture: {type: "t", value: bumpTexture},
             bumpScale: {type: "f", value: this.constants.terrainBumpScale},
-            oceanTexture: {type: "t", value: oceanTexture},
-            sandyTexture: {type: "t", value: sandyTexture},
-            grassTexture: {type: "t", value: greenTexture},
-            rockyTexture: {type: "t", value: rockyTexture},
-            snowyTexture: {type: "t", value: snowyTexture},
             terrainTexture: {type: "t", value: terrain},
-            //fogColor: {type: "c", value: this.scene.fog.color},
-            //fogNear: {type: "f", value: this.scene.fog.near},
-            //fogFar: {type: "f", value: this.scene.fog.far},
-            fogColor: {type: "c", value: null},
-            fogNear: {type: "f", value: 0},
-            fogFar: {type: "f", value: 0},
             splitCount: {type: "i", value: this.CSMParameters.splitCount},
             vectorsTextures: {
                 type: "tv", value: this.bufferTextures.map(function (bt) {
@@ -467,7 +473,9 @@ class ViewArea extends Component {
             textureMatrices: {type: "m4v", value: new Array(this.constants.maxSplitCount).fill(new THREE.Matrix4())},
             displayBorders: {type: "i", value: 0},
             cascadesBlendingFactor: {type: "f", value: this.CSMParameters.cascadesBlendingFactor},
-            enableCSM: {type: "i", value: 1}
+            enableCSM: {type: "i", value: 1},
+            displayPixelAreas: {type: "i", value: 0},
+            pixelAreaFactor: {type: "f", value: this.CSMParameters.pixelAreaFactor}
         };
 
         const plane = new THREE.Mesh(geometry, this.shaderMaterial);
