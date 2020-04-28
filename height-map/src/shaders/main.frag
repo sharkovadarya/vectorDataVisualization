@@ -17,6 +17,7 @@ uniform int enableCSM;
 
 uniform int displayPixelAreas;
 uniform float pixelAreaFactor;
+uniform float resolution;
 
 uniform mat4 textureMatrices[MAX_SPLITS];
 
@@ -98,7 +99,7 @@ void main() {
           vec4 p4 = vec4(posWS - dx / 2.0 - dy / 2.0) * textureMatrices[i];
           float area1 = calculateTriangleArea(p1.xy, p2.xy, p4.xy);
           float area2 = calculateTriangleArea(p1.xy, p3.xy, p4.xy);
-          float r = (area1 + area2) * pixelAreaFactor;
+          float r = (area1 + area2) * resolution * resolution;
           color = vec4(r, r, r, 1);
         }
       } else {
