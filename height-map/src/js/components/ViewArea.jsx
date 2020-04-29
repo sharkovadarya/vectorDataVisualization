@@ -30,8 +30,8 @@ import {calculatePassesCount, setUpZCoordEffectsComposer} from "./ZCoordinateEff
 import './CSMFrustumSplit'
 import {
     calculateMaxSplitDistances,
-    getOrthographicCameraForPerspectiveCamera, getPerspectiveTransformForLiSPSM,
-    getStableOrthographicCameraForPerspectiveCamera
+    getOrthographicCameraForPerspectiveCamera, getLightSpacePerspectiveCamera,
+    getStableOrthographicCameraForPerspectiveCamera, calculateCameraFrustumCorners
 } from "./CSMFrustumSplit";
 import {loadSVGToScene} from "./SVGLoader";
 
@@ -83,7 +83,7 @@ class ViewArea extends Component {
         this.canvasRef = React.createRef();
         this.divRef = React.createRef();
 
-        this.orthographicCameras = [];
+        this.splitCameras = [];
         this.bufferTextures = new Array(this.constants.maxSplitCount).fill(null);
         this.lightSpacePerspectiveMatrices = [];
 
@@ -143,14 +143,19 @@ class ViewArea extends Component {
             this.addFrustum = function() {
                 refs.scene.add(new THREE.CameraHelper(refs.camera.clone()));
                 for (let i = 0; i < refs.CSMParameters.splitCount; i++) {
-                    refs.scene.add(new THREE.CameraHelper(refs.orthographicCameras[i].clone()));
+                    refs.scene.add(new THREE.CameraHelper(refs.splitCameras[i].clone()));
                 }
+                //refs.scene.add(new THREE.CameraHelper(refs.splitCameras[0].clone()));
             };
 
             this.addPerspectiveFrustum = function() {
-                let camera = getPerspectiveTransformForLiSPSM(refs.camera, 1);
+                let helper = new THREE.AxesHelper(10);
+                helper.scale.multiplyScalar(1000);
+                refs.scene.add(helper);
+                getLightSpacePerspectiveCamera(refs.camera);
+                /*let camera = getLightSpacePerspectiveCamera(refs.camera, 1);
                 refs.scene.add(new THREE.CameraHelper(camera.clone()));
-                refs.scene.add(new THREE.CameraHelper(refs.camera.clone()));
+                refs.scene.add(new THREE.CameraHelper(refs.camera.clone()));*/
             }
 
             this.runPerformanceTest = function() {
@@ -261,7 +266,7 @@ class ViewArea extends Component {
                             this.precisionTestParameters.running = false;
                             this.precisionTestParameters[[`${name}Index`]] = 0;
                             console.log(`precision test for ${name} finished`);
-                            saveText( JSON.stringify(refs.testResults), `${name}.json`);
+                            saveText(JSON.stringify(refs.testResults), `${name}.json`);
                             refs.testResults = [];
                         }
                     }
@@ -400,7 +405,7 @@ class ViewArea extends Component {
             return;
         }
 
-        this.camera = this.createCamera(canvas, 4000, 2500, 800);
+        this.camera = this.createCamera(canvas, 0, 2500, 800);
         this.camera.name = "camera";
         this.controls = this.createControls(canvas, this.camera);
 
@@ -470,7 +475,7 @@ class ViewArea extends Component {
                     renderer.setClearColor(clearColor, clearAlpha);
                 }
 
-                this.createOrthographicCameras();
+                this.createSplitCameras();
                 this.createTextureMatrices();
 
                 this.shaderMaterial.uniforms.displayBorders.value = this.displayBorders ? 1 : 0;
@@ -480,11 +485,12 @@ class ViewArea extends Component {
                 //renderer.render(this.bufferScene, this.orthographicCameras[0]);
                 for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
                     renderer.setRenderTarget(this.bufferTextures[i]);
-                    renderer.render(this.bufferScene, this.orthographicCameras[i]);
+                    renderer.render(this.bufferScene, this.splitCameras[i]);
                 }
             }
 
             this.shaderMaterial.uniforms.enableCSM.value = this.CSMParameters.enabled ? 1 : 0;
+            this.shaderMaterial.uniforms.enableLiSPSM.value = this.LiSPSMParameters.enabled ? 1 : 0;
 
             if (this.CSMParameters.displayPixelAreas) {
                 let color = this.scene.background;
@@ -627,7 +633,8 @@ class ViewArea extends Component {
             enableCSM: {type: "i", value: 1},
             displayPixelAreas: {type: "i", value: 0},
             pixelAreaFactor: {type: "f", value: this.CSMParameters.pixelAreaFactor},
-            resolution: {type: "f", value: this.CSMParameters.textureResolution} // it doubles as both width and height of the texture
+            resolution: {type: "f", value: this.CSMParameters.textureResolution}, // it doubles as both width and height of the texture
+            enableLiSPSM: {type: "i", value: 0}
         };
 
         const plane = new THREE.Mesh(geometry, this.shaderMaterial);
@@ -676,7 +683,7 @@ class ViewArea extends Component {
         return arr
     }
 
-    createOrthographicCameras() {
+    createSplitCameras() {
         this.CSMParameters.maxSplitDistances = calculateMaxSplitDistances(
             this.CSMParameters.maxSplitDistances,
             this.CSMParameters.splitCount,
@@ -699,27 +706,23 @@ class ViewArea extends Component {
             currentCamera.position.set(this.camera.position.x, this.camera.position.y, this.camera.position.z);
             currentCamera.rotation.set(this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z);
             currentCamera.updateMatrixWorld(true);
-            if (this.stableCSMParameters.enabled) {
-                this.orthographicCameras[i] = getStableOrthographicCameraForPerspectiveCamera(currentCamera, textureSizes[i], this.CSMParameters.textureResolution, centerPosition);
-            } else {
-                this.orthographicCameras[i] = getOrthographicCameraForPerspectiveCamera(currentCamera);
-            }
-
             if (this.LiSPSMParameters.enabled) {
-                //this.lightSpacePerspectiveMatrices[i] = getPerspectiveTransformForLiSPSM(currentCamera, this.LiSPSMParameters.near);
+                this.splitCameras[i] = getLightSpacePerspectiveCamera(currentCamera);
+            } else {
+                if (this.stableCSMParameters.enabled) {
+                    this.splitCameras[i] = getStableOrthographicCameraForPerspectiveCamera(currentCamera, textureSizes[i], this.CSMParameters.textureResolution, centerPosition);
+                } else {
+                    this.splitCameras[i] = getOrthographicCameraForPerspectiveCamera(currentCamera);
+                }
             }
         }
     }
 
     createTextureMatrices() {
         let matrices = new Array(this.constants.maxSplitCount).fill(new THREE.Matrix4());
-        for (let i = 0; i < this.orthographicCameras.length; ++i) {
-            let m = this.orthographicCameras[i].projectionMatrix.clone();
-            // TODO is this order correct
-            /*if (this.LiSPSMParameters.enabled) {
-                m.multiply(this.lightSpacePerspectiveMatrices[i]);
-            }*/
-            m.multiply(this.orthographicCameras[i].matrixWorldInverse);
+        for (let i = 0; i < this.splitCameras.length; ++i) {
+            let m = this.splitCameras[i].projectionMatrix.clone();
+            m.multiply(this.splitCameras[i].matrixWorldInverse);
             matrices[i] = m;
         }
         this.shaderMaterial.uniforms['textureMatrices'].value = matrices;

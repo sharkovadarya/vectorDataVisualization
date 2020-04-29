@@ -13,7 +13,7 @@ export function calculateMaxSplitDistances(maxSplitDistances, splitCount, splitL
     return maxSplitDistances
 }
 
-function calculateCameraFrustumCorners(camera) {
+export function calculateCameraFrustumCorners(camera) {
     let NDCCorners = [
         [-1,-1,-1], [1,-1,-1], [-1,1,-1], [1,1,-1],
         [-1,-1, 1], [1,-1, 1], [-1,1, 1], [1,1, 1]];
@@ -65,7 +65,7 @@ export function getOrthographicCameraForPerspectiveCamera(camera) {
     let top = rangeY / 2;
 
     let cam = new THREE.OrthographicCamera(left, right, top, bottom, 0.1, 2000);
-    cam.position.set(centerX, 500, centerY);
+    cam.position.set(centerX, boundingBox.maxY, centerY);
     cam.rotation.set(-Math.PI / 2, 0, 0);
     cam.updateMatrixWorld( true );
 
@@ -93,4 +93,122 @@ export function getStableOrthographicCameraForPerspectiveCamera(camera, textureS
 
 function quantize(value, quant) {
     return quant * Math.floor(value / quant);
+}
+
+function calculateUpVector(lightDir, viewDir) {
+    let left = new THREE.Vector3().crossVectors(lightDir, viewDir);
+    return new THREE.Vector3().crossVectors(left, lightDir);
+}
+
+function look(pos, dir, up) {
+    let dirN = dir.normalize();
+    let lftN = new THREE.Vector3().crossVectors(dir, up).normalize();
+    let upN = new THREE.Vector3().crossVectors(lftN, dir).normalize();
+
+    let output = new THREE.Matrix4();
+
+    // this is still in column-major order i think
+    // straight up copied from sample implementation
+    output[ 0] = lftN[0];
+    output[ 1] = upN[0];
+    output[ 2] = -dirN[0];
+    output[ 3] = 0.0;
+
+    output[ 4] = lftN[1];
+    output[ 5] = upN[1];
+    output[ 6] = -dirN[1];
+    output[ 7] = 0.0;
+
+    output[ 8] = lftN[2];
+    output[ 9] = upN[2];
+    output[10] = -dirN[2];
+    output[11] = 0.0;
+
+    output[12] = -lftN.dot(pos);
+    output[13] = -upN.dot(pos);
+    output[14] = dirN.dot(pos);
+    output[15] = 1.0;
+
+    return output;
+}
+
+
+export function getLightSpacePerspectiveCamera(camera) {
+    let frustumCorners = calculateCameraFrustumCorners(camera);
+    let boundingBox = calculateBoundingBox(frustumCorners);
+
+    let points = frustumCorners.map(it => it.clone().sub(camera.position));
+
+    let bboxCenter = new THREE.Vector3(
+        (boundingBox.minX + boundingBox.maxX) / 2,
+        (boundingBox.minY + boundingBox.maxY) / 2,
+        (boundingBox.minZ + boundingBox.maxZ) / 2
+    )
+
+    let camDir = new THREE.Vector3();
+    camera.getWorldDirection(camDir);
+    let projDir = camDir.clone();
+    projDir.y = 0;
+    projDir.normalize();
+
+    let nearestPoint = null;
+    let farthestPoint = null;
+    let zn = Number.POSITIVE_INFINITY;
+    let zf = Number.NEGATIVE_INFINITY;
+    for (let i = 0; i < points.length; i++) {
+        let p = points[i].clone();
+        let dist = p.dot(camDir);
+        if (dist < zn) {
+            nearestPoint = frustumCorners[i];
+            zn = dist;
+        }
+        if (dist > zf) {
+            farthestPoint = frustumCorners[i];
+            zf = dist;
+        }
+    }
+
+    let sinGamma = Math.sin(camDir.angleTo(new THREE.Vector3(0, -1, 0)))
+    let N = (zn + Math.sqrt(zn * zf)) / sinGamma;
+
+    let nearPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(projDir.clone().multiplyScalar(-1), nearestPoint);
+    let farPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(projDir.clone().multiplyScalar(-1), farthestPoint);
+    let p0 = new THREE.Vector3();
+    nearPlane.projectPoint(farthestPoint, p0);
+    let d = Math.abs(farPlane.distanceToPoint(p0));
+
+    let F = N + d;
+
+    let centerDistanceToNearPlane = Math.abs(nearPlane.distanceToPoint(bboxCenter));
+
+    // it's too far away
+    let newPos = bboxCenter.clone();
+    newPos.sub(projDir.clone().multiplyScalar(centerDistanceToNearPlane));
+    newPos.sub(projDir.clone().multiplyScalar(N));
+
+    // i know we care about the horizontal fov but consider this: it doesn't work anyway
+    const perspectiveCamera = new THREE.PerspectiveCamera(90, 1, N, F);
+    perspectiveCamera.lookAt(projDir);
+    perspectiveCamera.position.set(newPos.x, newPos.y, newPos.z);
+    perspectiveCamera.updateMatrix();
+    perspectiveCamera.updateMatrixWorld(true);
+    perspectiveCamera.updateProjectionMatrix();
+
+    /*while (perspectiveCamera.fov <= 180) {
+        let frustum = new THREE.Frustum().setFromMatrix(new THREE.Matrix4().multiplyMatrices(perspectiveCamera.projectionMatrix, perspectiveCamera.matrixWorldInverse));
+        let containsAllPoints = true;
+        frustumCorners.forEach(c => {
+            if (!frustum.containsPoint(c)) {
+                containsAllPoints = false;
+            }
+        });
+        if (containsAllPoints) {
+            break;
+        }
+        perspectiveCamera.fov++;
+        perspectiveCamera.updateProjectionMatrix();
+    }*/
+
+    return perspectiveCamera;
+
 }

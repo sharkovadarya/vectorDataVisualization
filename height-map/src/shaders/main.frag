@@ -14,6 +14,7 @@ uniform float cascadesBlendingFactor;
 
 uniform int displayBorders;
 uniform int enableCSM;
+uniform int enableLiSPSM;
 
 uniform int displayPixelAreas;
 uniform float pixelAreaFactor;
@@ -32,9 +33,15 @@ bool inRange(vec2 v) {
 
 bool get_projected_texture_color(vec4 coord, int idx, out vec4 color) {
   vec3 projected_c = coord.xyz / coord.w;
-  bool in_range = inRange(projected_c.xy);
+  vec2 c;
+  if (enableLiSPSM == 1) {
+    c = projected_c.xz;
+  } else {
+    c = projected_c.xy;
+  }
+  bool in_range = inRange(c);
   if (in_range) {
-    vec2 tex_coord = vec2(0.5, 0.5) + 0.5 * projected_c.xy;
+    vec2 tex_coord = vec2(0.5, 0.5) + 0.5 * c;
     // a switch statement stops getting parsed after the first colon
     // directly indexing an array (vectorsTextures[i]) proved to be impossible
     // DataTexture2DArray is somehow not bundled in the three.js npm version
@@ -62,8 +69,7 @@ bool get_projected_texture_color(vec4 coord, int idx, out vec4 color) {
     }
 
     if (displayBorders == 1) {
-      if (projected_c.x <= -0.95 || projected_c.y <= -0.95 ||
-      projected_c.x >= 0.95 || projected_c.y >= 0.95) {
+      if (c.x <= -0.95 || c.y <= -0.95 || c.x >= 0.95 || c.y >= 0.95) {
         color = vec4(1.0, 0.0, 0.0, 1.0);
       }
     }
@@ -103,10 +109,10 @@ void main() {
           color = vec4(r, r, r, 1);
         }
       } else {
-        vec3 projected_c = projected_texcoords[i].xyz / projected_texcoords[i].w;
         if (get_projected_texture_color(projected_texcoords[i], i, color)) {
 
-          if (projected_c.x <= 1.0 && projected_c.x >= 1.0 - cascadesBlendingFactor ||
+          // blending turned off until we figure out lispsm
+          /*if (projected_c.x <= 1.0 && projected_c.x >= 1.0 - cascadesBlendingFactor ||
           projected_c.y <= 1.0 && projected_c.y >= 1.0 - cascadesBlendingFactor ||
           projected_c.x >= -1.0 && projected_c.x <= -1.0 + cascadesBlendingFactor ||
           projected_c.y >= -1.0 && projected_c.y <= -1.0 + cascadesBlendingFactor) {
@@ -115,7 +121,7 @@ void main() {
             if (i + 1 < splitCount && get_projected_texture_color(projected_texcoords[i + 1], i + 1, next_split_color)) {
               color = mix(color, next_split_color, 0.5);
             }
-          }
+          }*/
           break;
         }
       }
