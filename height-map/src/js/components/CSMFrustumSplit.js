@@ -65,7 +65,7 @@ export function getOrthographicCameraForPerspectiveCamera(camera) {
     let top = rangeY / 2;
 
     let cam = new THREE.OrthographicCamera(left, right, top, bottom, 0.1, 2000);
-    cam.position.set(centerX, boundingBox.maxY, centerY);
+    cam.position.set(centerX, 500, centerY);
     cam.rotation.set(-Math.PI / 2, 0, 0);
     cam.updateMatrixWorld( true );
 
@@ -94,44 +94,6 @@ export function getStableOrthographicCameraForPerspectiveCamera(camera, textureS
 function quantize(value, quant) {
     return quant * Math.floor(value / quant);
 }
-
-function calculateUpVector(lightDir, viewDir) {
-    let left = new THREE.Vector3().crossVectors(lightDir, viewDir);
-    return new THREE.Vector3().crossVectors(left, lightDir);
-}
-
-function look(pos, dir, up) {
-    let dirN = dir.normalize();
-    let lftN = new THREE.Vector3().crossVectors(dir, up).normalize();
-    let upN = new THREE.Vector3().crossVectors(lftN, dir).normalize();
-
-    let output = new THREE.Matrix4();
-
-    // this is still in column-major order i think
-    // straight up copied from sample implementation
-    output[ 0] = lftN[0];
-    output[ 1] = upN[0];
-    output[ 2] = -dirN[0];
-    output[ 3] = 0.0;
-
-    output[ 4] = lftN[1];
-    output[ 5] = upN[1];
-    output[ 6] = -dirN[1];
-    output[ 7] = 0.0;
-
-    output[ 8] = lftN[2];
-    output[ 9] = upN[2];
-    output[10] = -dirN[2];
-    output[11] = 0.0;
-
-    output[12] = -lftN.dot(pos);
-    output[13] = -upN.dot(pos);
-    output[14] = dirN.dot(pos);
-    output[15] = 1.0;
-
-    return output;
-}
-
 
 export function getLightSpacePerspectiveCamera(camera) {
     let frustumCorners = calculateCameraFrustumCorners(camera);
