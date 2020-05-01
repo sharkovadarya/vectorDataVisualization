@@ -13,13 +13,6 @@ import fragShader from '../../shaders/main.frag';
 import terrainZVxShader from '../../shaders/terrain_z_coord.vert'
 import terrainZFragShader from '../../shaders/terrain_z_coord.frag'
 
-import sandTexture from '../../textures/sand-512.jpg';
-import rockTexture from '../../textures/rock-512.jpg';
-import snowTexture from '../../textures/snow-512.jpg';
-import waterTexture from '../../textures/water512.jpg';
-import heightMapTexture from '../../textures/height_map.png';
-import meadowTexture from '../../textures/grass-512.jpg';
-
 import DEMTexture from '../../textures/bumpTexture.jpg';
 import terrainTexture from '../../textures/terrainTexture.jpg'
 
@@ -140,14 +133,16 @@ class ViewArea extends Component {
             this.passesCount = refs.CSMParameters.passesCount;
             this.passesFactor = refs.CSMParameters.passesFactor;
 
+            this.displayPixels = false;
+
             this.addFrustum = function() {
                 refs.scene.add(new THREE.CameraHelper(refs.camera.clone()));
                 for (let i = 0; i < refs.CSMParameters.splitCount; i++) {
                     refs.scene.add(new THREE.CameraHelper(refs.splitCameras[i].clone()));
                 }
-                //refs.scene.add(new THREE.CameraHelper(refs.splitCameras[0].clone()));
             };
 
+            // this one is just for debug and does whatever. the title is misleading. will be fixed one day
             this.addPerspectiveFrustum = function() {
                 let helper = new THREE.AxesHelper(10);
                 helper.scale.multiplyScalar(1000);
@@ -179,8 +174,11 @@ class ViewArea extends Component {
                         }
                     }
 
-                    refs.CSMParameters.passesCount = refs.performanceTestParameters.passesParameters[0].passesCount;
-                    refs.CSMParameters.passesFactor = refs.performanceTestParameters.passesParameters[0].passesFactor;
+                    // uncomment these lines to run a true performance test on pass parameters
+                    // keep commented to run a performance test on whatever your current configuration is
+
+                    /*refs.CSMParameters.passesCount = refs.performanceTestParameters.passesParameters[0].passesCount;
+                    refs.CSMParameters.passesFactor = refs.performanceTestParameters.passesParameters[0].passesFactor;*/
 
                     refs.performanceTestParameters.running = true;
                 });
@@ -194,7 +192,7 @@ class ViewArea extends Component {
             this.runResolutionPrecisionTest = function () {
                 this.setCameraForPrecisionTest()
                 if (this.precisionTestParameters.textureResolution.length === 0) {
-                    for (let i = 512; i <= 2048; i++) {
+                    for (let i = 128; i <= 2048; i++) {
                         this.precisionTestParameters.textureResolution.push(i);
                     }
                 }
@@ -293,7 +291,8 @@ class ViewArea extends Component {
             gui.add(parameters, 'addFrustum');
             gui.add(parameters, 'addPerspectiveFrustum');
             gui.add(parameters, 'runPerformanceTest');
-            gui.add(parameters, 'textureResolution').min(512).max(4096).step(1);
+            gui.add(parameters, 'displayPixels');
+            gui.add(parameters, 'textureResolution').min(128).max(4096).step(1);
             gui.add(parameters, 'pushFar').min(0).max(4000).step(1);
             gui.add(parameters, 'passesCount').min(1).max(refs.CSMParameters.passesCount).step(1);
             gui.add(parameters, 'passesFactor').min(2).max(5).step(1);
@@ -319,13 +318,13 @@ class ViewArea extends Component {
                 this.passesFactor = factor;
                 this.passesCount = count;
             };
-            for (let i = 2; i <= 5; i++) {
+            /*for (let i = 2; i <= 5; i++) {
                 const maxSize = calculatePassesCount(window.innerWidth, window.innerHeight, i);
                 for (let j = 1; j <= maxSize; j++) {
                     refs.performanceTestParameters.passesParameters.push(new PassParameters(i, j));
                 }
             }
-            refs.performanceTestParameters.passesParametersIndex = 0;
+            refs.performanceTestParameters.passesParametersIndex = 0;*/
 
             let update = function () {
                 requestAnimationFrame(update);
@@ -394,6 +393,8 @@ class ViewArea extends Component {
                 refs.LiSPSMParameters.enabled = parameters.LiSPSMEnabled;
                 refs.LiSPSMParameters.near = parameters.LiSPSMNear;
 
+                refs.shaderMaterial.uniforms.displayPixels.value = parameters.displayPixels ? 1 : 0;
+
             };
             update();
         };
@@ -425,6 +426,7 @@ class ViewArea extends Component {
 
         let then = 0;
         let fpsSum = 0, fpsCount = 0;
+        let timeSum = 0;
         const renderLoopTick = (now) => {
             this.debugCount++;
             now *= 0.001;
@@ -436,21 +438,27 @@ class ViewArea extends Component {
                 let rotation = this.performanceTestParameters.testCameraData.rotations[this.performanceTestParameters.testCameraDataIndex]
 
                 fpsSum += stats.fps;
+                timeSum += stats.time;
                 fpsCount++;
                 this.camera.position.set(pos.x, pos.y, pos.z);
                 this.camera.rotation.set(rotation.x, rotation.y, rotation.z);
                 this.performanceTestParameters.testCameraDataIndex++;
                 if (this.performanceTestParameters.testCameraDataIndex === this.performanceTestParameters.testCameraData.positions.length) {
-                    this.performanceTestParameters.passesParametersIndex++;
+                    //this.performanceTestParameters.passesParametersIndex++;
                     console.log("Average FPS for factor ", this.CSMParameters.passesFactor, ", count ", this.CSMParameters.passesCount, " : ", fpsSum / fpsCount);
-                    if (this.performanceTestParameters.passesParametersIndex >= this.performanceTestParameters.passesParameters.length) {
+                    console.log("Average time for factor ", this.CSMParameters.passesFactor, ", count ", this.CSMParameters.passesCount, " : ", timeSum / fpsCount);
+                    this.performanceTestParameters.running = false;
+                    // use this for a performance test on zmin/zmax params
+                    // keep commented for a performance test on whatever your current configuration is
+
+                    /*if (this.performanceTestParameters.passesParametersIndex >= this.performanceTestParameters.passesParameters.length) {
                         this.performanceTestParameters.running = false;
                     } else {
                         let param = this.performanceTestParameters.passesParameters[this.performanceTestParameters.passesParametersIndex];
                         this.CSMParameters.passesFactor = param.passesFactor;
                         this.CSMParameters.passesCount = param.passesCount;
                         this.composer = setUpZCoordEffectsComposer(this.composer.renderer, canvas.width, canvas.height, this.zScene, this.camera, this.CSMParameters.passesCount, this.CSMParameters.passesFactor);
-                    }
+                    }*/
                     fpsSum = 0;
                     fpsCount = 0;
                     this.performanceTestParameters.testCameraDataIndex = 0;
@@ -458,7 +466,7 @@ class ViewArea extends Component {
             }
 
             if (this.CSMParameters.enabled) {
-                if (!this.stableCSMParameters.enabled) {
+                if (!this.stableCSMParameters.enabled && this.CSMParameters.splitCount > 1) {
                     // set composer renderer parameters
                     this.composer.renderer.setClearColor(new THREE.Color(1e9, -1e9, 0), 1);
                     this.composer.renderer.setViewport(0, 0, Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
@@ -515,6 +523,7 @@ class ViewArea extends Component {
                     splitLambda: this.CSMParameters.splitLambda,
                     projectedAreaSide: this.stableCSMParameters.projectedAreaSide,
                     avg: sum / cnt});
+                console.log(sum / cnt);
             }
 
             renderer.setRenderTarget(null);
@@ -634,7 +643,8 @@ class ViewArea extends Component {
             displayPixelAreas: {type: "i", value: 0},
             pixelAreaFactor: {type: "f", value: this.CSMParameters.pixelAreaFactor},
             resolution: {type: "f", value: this.CSMParameters.textureResolution}, // it doubles as both width and height of the texture
-            enableLiSPSM: {type: "i", value: 0}
+            enableLiSPSM: {type: "i", value: 0},
+            displayPixels: {type: "i", value: 0}
         };
 
         const plane = new THREE.Mesh(geometry, this.shaderMaterial);

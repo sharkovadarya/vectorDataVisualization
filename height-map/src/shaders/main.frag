@@ -15,6 +15,7 @@ uniform float cascadesBlendingFactor;
 uniform int displayBorders;
 uniform int enableCSM;
 uniform int enableLiSPSM;
+uniform int displayPixels;
 
 uniform int displayPixelAreas;
 uniform float pixelAreaFactor;
@@ -66,6 +67,18 @@ bool get_projected_texture_color(vec4 coord, int idx, out vec4 color) {
       color = texture2D(vectorsTextures[8], tex_coord);
     } else if (idx == 9) {
       color = texture2D(vectorsTextures[9], tex_coord);
+    }
+
+    if (displayPixels == 1) {
+      if (color.w != 0.0) {
+        tex_coord.x *= resolution;
+        tex_coord.y *= resolution;
+        if (fract(tex_coord.x) <= 0.1 || fract(tex_coord.y) <= 0.1 || fract(tex_coord.x) >= 0.9 || fract(tex_coord.y) >= 0.9) {
+          color = vec4(1, 0, 0, 1);
+        } else {
+          color = vec4(0, 1, 0, 1);
+        }
+      }
     }
 
     if (displayBorders == 1) {
