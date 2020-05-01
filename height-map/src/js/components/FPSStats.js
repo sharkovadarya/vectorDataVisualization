@@ -62,6 +62,7 @@ var Stats = function () {
         showPanel: showPanel,
 
         fps: 0,
+        time: 0,
 
         begin: function () {
 
@@ -76,6 +77,7 @@ var Stats = function () {
             var time = ( performance || Date ).now();
 
             msPanel.update( time - beginTime, 200 );
+            this.time = time - beginTime;
 
             if ( time >= prevTime + 1000 ) {
 
