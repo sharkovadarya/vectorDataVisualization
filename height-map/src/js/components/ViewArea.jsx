@@ -434,7 +434,6 @@ class ViewArea extends Component {
                     this.composer.renderer.setViewport(0, 0, Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
 
                     this.composer.render(deltaTime);
-                    let p = this.composer.passes;
                     let lastPass = this.composer.passes[this.composer.passes.length - 1];
                     let textureSize = lastPass.uniforms.textureSize.value.clone().divideScalar(this.CSMParameters.passesFactor).ceil();
                     let pixels = new Float32Array(4 * textureSize.width * textureSize.height);
