@@ -4,7 +4,7 @@ import {OrbitControls} from "three/examples/jsm/controls/OrbitControls";
 import * as dat from 'dat.gui'
 import $ from 'jquery';
 
-// this is stats-js but with an additional public field
+// this is stats-js but with additional public fields
 import Stats from './FPSStats';
 
 import vxShader from '../../shaders/main.vert';
@@ -22,9 +22,9 @@ import './ZCoordinateEffectsComposer';
 import {calculatePassesCount, setUpZCoordEffectsComposer} from "./ZCoordinateEffectsComposer";
 import './CSMFrustumSplit'
 import {
-    calculateMaxSplitDistances,
+    calculateSplits,
     getOrthographicCameraForPerspectiveCamera, getLightSpacePerspectiveCamera,
-    getStableOrthographicCameraForPerspectiveCamera, calculateCameraFrustumCorners
+    getStableOrthographicCameraForPerspectiveCamera
 } from "./CSMFrustumSplit";
 import {loadSVGToScene} from "./SVGLoader";
 
@@ -42,6 +42,7 @@ class ViewArea extends Component {
         this.constants = {
             maxSplitCount: 10,
             terrainBumpScale: 400.0,
+            // terrainBumpScale: 1.0,
         };
 
         this.CSMParameters = {
@@ -53,11 +54,12 @@ class ViewArea extends Component {
             far: 10000,
             textureResolution: 512,
             cascadesBlendingFactor: 0.1,
-            pushFar: 500,
             passesCount: 5,
             passesFactor: 2,
             displayPixelAreas: false,
-            pixelAreaFactor: 100000
+            displayBorders: true,
+            displayTextures: true,
+            displayPixels: false
         };
 
         this.stableCSMParameters = {
@@ -67,8 +69,7 @@ class ViewArea extends Component {
         };
 
         this.LiSPSMParameters = {
-            enabled: false,
-            near: 1
+            enabled: false
         };
 
 
@@ -80,8 +81,6 @@ class ViewArea extends Component {
         this.bufferTextures = new Array(this.constants.maxSplitCount).fill(null);
         this.lightSpacePerspectiveMatrices = [];
 
-        this.displayBorders = false;
-        this.displayTextures = true;
 
         // for zMin - zMax calculations
         this.zScene = new THREE.Scene();
@@ -91,11 +90,11 @@ class ViewArea extends Component {
         //this.scene.fog = new THREE.Fog('lightblue', 1, 6000);
 
         this.bufferScene = new THREE.Scene();
-        this.initBufferTexture();
+        this.initBufferTextures();
 
         this.createLights();
 
-        this.shaderMaterial = new THREE.ShaderMaterial({uniforms: {}, vertexShader: vxShader, fragmentShader: fragShader});
+        this.shaderMaterial = new THREE.ShaderMaterial({uniforms: {transparent: true}, vertexShader: vxShader, fragmentShader: fragShader});
         this.terrain = this.createMeshes();
 
         this.debugScene = new THREE.Scene();
@@ -107,7 +106,9 @@ class ViewArea extends Component {
                 rotations: []
             },
             testCameraDataIndex: 0,
-            passesParameters: []
+            fpsSum: 0,
+            timeSum: 0,
+            fpsCount: 0,
         }
 
         const DataDisplayParameters = function () {
@@ -128,8 +129,6 @@ class ViewArea extends Component {
 
             this.cascadesBlendingFactor = 0.1;
 
-            this.pushFar = 500;
-
             this.passesCount = refs.CSMParameters.passesCount;
             this.passesFactor = refs.CSMParameters.passesFactor;
 
@@ -144,10 +143,12 @@ class ViewArea extends Component {
 
             // this one is just for debug and does whatever. the title is misleading. will be fixed one day
             this.addPerspectiveFrustum = function() {
-                let helper = new THREE.AxesHelper(10);
-                helper.scale.multiplyScalar(1000);
-                refs.scene.add(helper);
-                getLightSpacePerspectiveCamera(refs.camera);
+                let cam = getLightSpacePerspectiveCamera(refs.camera, refs.scene);
+                refs.scene.add(new THREE.CameraHelper(cam.clone()));
+                //refs.scene.add(new THREE.CameraHelper(refs.splitCameras[0]));
+                refs.camera.far = 40000;
+                refs.camera.updateProjectionMatrix();
+                //getLightSpacePerspectiveCamera(refs.camera);
                 /*let camera = getLightSpacePerspectiveCamera(refs.camera, 1);
                 refs.scene.add(new THREE.CameraHelper(camera.clone()));
                 refs.scene.add(new THREE.CameraHelper(refs.camera.clone()));*/
@@ -174,12 +175,6 @@ class ViewArea extends Component {
                         }
                     }
 
-                    // uncomment these lines to run a true performance test on pass parameters
-                    // keep commented to run a performance test on whatever your current configuration is
-
-                    /*refs.CSMParameters.passesCount = refs.performanceTestParameters.passesParameters[0].passesCount;
-                    refs.CSMParameters.passesFactor = refs.performanceTestParameters.passesParameters[0].passesFactor;*/
-
                     refs.performanceTestParameters.running = true;
                 });
             }
@@ -192,7 +187,7 @@ class ViewArea extends Component {
             this.runResolutionPrecisionTest = function () {
                 this.setCameraForPrecisionTest()
                 if (this.precisionTestParameters.textureResolution.length === 0) {
-                    for (let i = 128; i <= 2048; i++) {
+                    for (let i = 512; i <= 1536; i++) {
                         this.precisionTestParameters.textureResolution.push(i);
                     }
                 }
@@ -250,10 +245,8 @@ class ViewArea extends Component {
             }
 
             this.displayPixelAreas = false;
-            this.pixelAreaFactor = 100000;
 
             this.LiSPSMEnabled = false;
-            this.LiSPSMNear = 1;
 
 
             this.runPrecisionTest = function(name) {
@@ -277,126 +270,120 @@ class ViewArea extends Component {
         this.testResults = [];
 
         let refs = this;
+        let updateParametersValue = (parametersGroup, parameterName, value) => {
+            this[parametersGroup][parameterName] = value;
+        };
+        let updateCSMParametersValue = (parameterName, value) => {
+            this.CSMParameters[parameterName] = value;
+        };
+        let updateStableCSMParametersValue = (parameterName, value) => {
+            this.stableCSMParameters[parameterName] = value;
+        };
+        let updateComposer = (passesCount, passesFactor) => {
+            if (passesFactor === null) {
+                passesFactor = this.CSMParameters.passesFactor;
+            }
+            if (passesCount === null) {
+                passesCount = Number.POSITIVE_INFINITY;
+            }
+            if (passesFactor !== this.CSMParameters.passesFactor || passesCount !== this.CSMParameters.passesCount) {
+                const size = new THREE.Vector2();
+                this.composer.renderer.getSize(size);
+                passesCount = Math.min(passesCount, calculatePassesCount(size.width, size.height, passesFactor));
+                this.composer = setUpZCoordEffectsComposer(this.composer.renderer, size.width, size.height, this.zScene, this.camera, passesCount, passesFactor);
+                this.CSMParameters.passesCount = passesCount;
+                this.CSMParameters.passesFactor = passesFactor;
+            }
+        }
         window.onload = function() {
             let parameters = new DataDisplayParameters();
             let gui = new dat.GUI();
 
-            gui.add(parameters, 'CSMEnabled');
-            gui.add(parameters, 'splitCount').min(1).max(refs.constants.maxSplitCount).step(1);
-            gui.add(parameters, 'splitType', ["logarithmic", "linear", "mixed"]);
-            gui.add(parameters, 'splitLambda').min(0.0).max(1.0).step(0.001);
-            gui.add(parameters, 'cascadesBlendingFactor').min(0.0).max(1.0).step(0.001);
-            gui.add(parameters, 'displayBorders');
-            gui.add(parameters, 'displayTextures');
+            let CSMEnabled = gui.add(parameters, 'CSMEnabled');
+            CSMEnabled.onFinishChange((value) => {
+                updateCSMParametersValue('enabled', value);
+            });
+            let splitCount = gui.add(parameters, 'splitCount').min(1).max(refs.constants.maxSplitCount).step(1);
+            splitCount.onChange((value) => {
+                updateCSMParametersValue('splitCount', value);
+            });
+            let splitType = gui.add(parameters, 'splitType', ["logarithmic", "linear", "mixed"]);
+            splitType.onFinishChange((value) => {
+                if (value === "logarithmic") {
+                    updateCSMParametersValue('splitLambda', 1.0);
+                } else if (value === "linear") {
+                    updateCSMParametersValue('splitLambda', 0.0);
+                }
+            });
+            let splitLambda = gui.add(parameters, 'splitLambda').min(0.0).max(1.0).step(0.001);
+            splitLambda.onChange((value) => {
+                updateCSMParametersValue('splitLambda', value);
+            });
+
+            //gui.add(parameters, 'cascadesBlendingFactor').min(0.0).max(1.0).step(0.001);
+
+            let displayBorders = gui.add(parameters, 'displayBorders');
+            displayBorders.onFinishChange((value) => {
+                updateCSMParametersValue('displayBorders', value);
+            });
+            let displayTextures = gui.add(parameters, 'displayTextures');
+            displayTextures.onFinishChange((value) => {
+                updateCSMParametersValue('displayTextures', value);
+            });
+            let displayPixels = gui.add(parameters, 'displayPixels');
+            displayPixels.onFinishChange((value) => {
+                updateCSMParametersValue('displayPixels', value);
+            });
             gui.add(parameters, 'addFrustum');
             gui.add(parameters, 'addPerspectiveFrustum');
+
             gui.add(parameters, 'runPerformanceTest');
-            gui.add(parameters, 'displayPixels');
-            gui.add(parameters, 'textureResolution').min(128).max(4096).step(1);
-            gui.add(parameters, 'pushFar').min(0).max(4000).step(1);
-            gui.add(parameters, 'passesCount').min(1).max(refs.CSMParameters.passesCount).step(1);
-            gui.add(parameters, 'passesFactor').min(2).max(5).step(1);
-            gui.add(parameters, 'stable');
+
+            let textureResolution = gui.add(parameters, 'textureResolution').min(128).max(2048).step(1);
+            textureResolution.onChange((value) => {
+                updateCSMParametersValue('textureResolution', value);
+            });
+
+            let passesCount = gui.add(parameters, 'passesCount').min(1).max(11).step(1);
+            passesCount.onChange((value) => {
+                updateComposer(value, null);
+            });
+            let passesFactor = gui.add(parameters, 'passesFactor').min(2).max(5).step(1);
+            passesFactor.onChange((value) => {
+                updateComposer(null, value);
+            });
+
+            let stableEnabled = gui.add(parameters, 'stable');
+            stableEnabled.onFinishChange((value) => {
+                updateStableCSMParametersValue('enabled', value);
+            });
+
             const stableCSMFolder = gui.addFolder('Stable CSM Parameters');
-            stableCSMFolder.add(parameters, 'firstTextureSize').min(50).max(10000).step(1);
-            stableCSMFolder.add(parameters, 'projectedAreaSide').min(5000).max(30000).step(100);
-            gui.add(parameters, 'displayPixelAreas');
-            gui.add(parameters, 'pixelAreaFactor').min(1000.0).max(1000000.0);
+            let firstTextureSize = stableCSMFolder.add(parameters, 'firstTextureSize').min(50).max(10000).step(1);
+            firstTextureSize.onChange((value) => {
+                updateStableCSMParametersValue('firstTextureSize', value);
+            });
+            let projectedAreaSide = stableCSMFolder.add(parameters, 'projectedAreaSide').min(5000).max(30000).step(100);
+            projectedAreaSide.onChange((value) => {
+                updateStableCSMParametersValue('projectedAreaSide', value);
+            });
+
+            let displayPixelAreas = gui.add(parameters, 'displayPixelAreas');
+            displayPixelAreas.onFinishChange((value) => {
+                updateCSMParametersValue('displayPixelAreas', value);
+            });
+
             const LiSPSMFolder = gui.addFolder('Light Space PSM Parameters');
-            LiSPSMFolder.add(parameters, 'LiSPSMEnabled');
-            // TODO figure out the actual parameters
-            LiSPSMFolder.add(parameters, 'LiSPSMNear').min(0.1).max(4000);
+            let LiSPSMEnabled = LiSPSMFolder.add(parameters, 'LiSPSMEnabled');
+            LiSPSMEnabled.onFinishChange((value) => {
+                updateParametersValue('LiSPSMParameters', 'enabled', value);
+            });
+
             const precisionTestFolder = gui.addFolder('Precision Test');
             precisionTestFolder.add(parameters, 'runResolutionPrecisionTest');
             precisionTestFolder.add(parameters, 'runCascadesPrecisionTest');
             precisionTestFolder.add(parameters, 'runSplitPrecisionTest');
             precisionTestFolder.add(parameters, 'runProjectionAreaPrecisionTest');
-
-
-
-            let PassParameters = function(factor = -1, count = -1) {
-                this.passesFactor = factor;
-                this.passesCount = count;
-            };
-            /*for (let i = 2; i <= 5; i++) {
-                const maxSize = calculatePassesCount(window.innerWidth, window.innerHeight, i);
-                for (let j = 1; j <= maxSize; j++) {
-                    refs.performanceTestParameters.passesParameters.push(new PassParameters(i, j));
-                }
-            }
-            refs.performanceTestParameters.passesParametersIndex = 0;*/
-
-            let update = function () {
-                requestAnimationFrame(update);
-                switch (parameters.splitType) {
-                    case "logarithmic":
-                        parameters.splitLambda = 1.0;
-                        break;
-                    case "linear":
-                        parameters.splitLambda = 0.0;
-                        break;
-                }
-
-                parameters.runPrecisionTest('textureResolution');
-                if (parameters.stable) {
-                    parameters.runPrecisionTest('projectedAreaSide');
-                } else {
-                    parameters.runPrecisionTest('splitLambda');
-                }
-                parameters.runPrecisionTest('splitCount');
-
-                for (let i in gui.__controllers) {
-                    gui.__controllers[i].updateDisplay();
-                }
-
-                refs.CSMParameters.splitCount = parameters.splitCount;
-                refs.CSMParameters.splitLambda = parameters.splitLambda;
-                refs.CSMParameters.cascadesBlendingFactor = parameters.cascadesBlendingFactor;
-                refs.displayBorders = parameters.displayBorders;
-                refs.displayTextures = parameters.displayTextures;
-
-                if (!parameters.stable) {
-                    stableCSMFolder.close();
-                } else {
-                    stableCSMFolder.open();
-                }
-
-                refs.stableCSMParameters.enabled = parameters.stable;
-                refs.stableCSMParameters.firstTextureSize = parameters.firstTextureSize;
-                refs.stableCSMParameters.projectedAreaSide = parameters.projectedAreaSide;
-                if (parameters.textureResolution !== refs.CSMParameters.textureResolution) {
-                    refs.CSMParameters.textureResolution = parameters.textureResolution;
-                    refs.shaderMaterial.uniforms.resolution.value = parameters.textureResolution;
-                    for (let i = 0; i < refs.CSMParameters.splitCount; i++) {
-                        refs.bufferTextures[i].setSize(parameters.textureResolution, parameters.textureResolution);
-                    }
-                }
-                refs.CSMParameters.pushFar = parameters.pushFar;
-                refs.CSMParameters.enabled = parameters.CSMEnabled;
-                if (!refs.performanceTestParameters.running && (parameters.passesCount !== refs.CSMParameters.passesCount || parameters.passesFactor !== refs.CSMParameters.passesFactor)) {
-                    const size = new THREE.Vector2();
-                    refs.composer.renderer.getSize(size);
-                    let passesCount = Math.min(parameters.passesCount, calculatePassesCount(size.width, size.height, parameters.passesFactor));
-                    refs.composer = setUpZCoordEffectsComposer(refs.composer.renderer, size.width, size.height, refs.zScene, refs.camera, passesCount, parameters.passesFactor);
-                    refs.CSMParameters.passesCount = passesCount;
-                    parameters.passesCount = passesCount;
-                    refs.CSMParameters.passesFactor = parameters.passesFactor;
-                }
-                if (parameters.displayPixelAreas !== refs.CSMParameters.displayPixelAreas) {
-                    refs.CSMParameters.displayPixelAreas = parameters.displayPixelAreas;
-                    refs.shaderMaterial.uniforms.displayPixelAreas.value = parameters.displayPixelAreas ? 1 : 0;
-                }
-                if (parameters.pixelAreaFactor !== refs.CSMParameters.pixelAreaFactor) {
-                    refs.CSMParameters.pixelAreaFactor = parameters.pixelAreaFactor;
-                    refs.shaderMaterial.uniforms.pixelAreaFactor.value = parameters.pixelAreaFactor;
-                }
-                refs.LiSPSMParameters.enabled = parameters.LiSPSMEnabled;
-                refs.LiSPSMParameters.near = parameters.LiSPSMNear;
-
-                refs.shaderMaterial.uniforms.displayPixels.value = parameters.displayPixels ? 1 : 0;
-
-            };
-            update();
         };
     }
 
@@ -433,45 +420,21 @@ class ViewArea extends Component {
             const deltaTime = now - then;
             then = now;
 
+            this.resizeTextures();
+            this.updateMaterialUniformsFromParameters();
+
             if (this.performanceTestParameters.running) {
-                let pos = this.performanceTestParameters.testCameraData.positions[this.performanceTestParameters.testCameraDataIndex];
-                let rotation = this.performanceTestParameters.testCameraData.rotations[this.performanceTestParameters.testCameraDataIndex]
-
-                fpsSum += stats.fps;
-                timeSum += stats.time;
-                fpsCount++;
-                this.camera.position.set(pos.x, pos.y, pos.z);
-                this.camera.rotation.set(rotation.x, rotation.y, rotation.z);
-                this.performanceTestParameters.testCameraDataIndex++;
-                if (this.performanceTestParameters.testCameraDataIndex === this.performanceTestParameters.testCameraData.positions.length) {
-                    //this.performanceTestParameters.passesParametersIndex++;
-                    console.log("Average FPS for factor ", this.CSMParameters.passesFactor, ", count ", this.CSMParameters.passesCount, " : ", fpsSum / fpsCount);
-                    console.log("Average time for factor ", this.CSMParameters.passesFactor, ", count ", this.CSMParameters.passesCount, " : ", timeSum / fpsCount);
-                    this.performanceTestParameters.running = false;
-                    // use this for a performance test on zmin/zmax params
-                    // keep commented for a performance test on whatever your current configuration is
-
-                    /*if (this.performanceTestParameters.passesParametersIndex >= this.performanceTestParameters.passesParameters.length) {
-                        this.performanceTestParameters.running = false;
-                    } else {
-                        let param = this.performanceTestParameters.passesParameters[this.performanceTestParameters.passesParametersIndex];
-                        this.CSMParameters.passesFactor = param.passesFactor;
-                        this.CSMParameters.passesCount = param.passesCount;
-                        this.composer = setUpZCoordEffectsComposer(this.composer.renderer, canvas.width, canvas.height, this.zScene, this.camera, this.CSMParameters.passesCount, this.CSMParameters.passesFactor);
-                    }*/
-                    fpsSum = 0;
-                    fpsCount = 0;
-                    this.performanceTestParameters.testCameraDataIndex = 0;
-                }
+                this.runPerformanceTest(stats);
             }
 
             if (this.CSMParameters.enabled) {
-                if (!this.stableCSMParameters.enabled && this.CSMParameters.splitCount > 1) {
+                if (!this.stableCSMParameters.enabled) {
                     // set composer renderer parameters
                     this.composer.renderer.setClearColor(new THREE.Color(1e9, -1e9, 0), 1);
                     this.composer.renderer.setViewport(0, 0, Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
 
                     this.composer.render(deltaTime);
+                    let p = this.composer.passes;
                     let lastPass = this.composer.passes[this.composer.passes.length - 1];
                     let textureSize = lastPass.uniforms.textureSize.value.clone().divideScalar(this.CSMParameters.passesFactor).ceil();
                     let pixels = new Float32Array(4 * textureSize.width * textureSize.height);
@@ -486,19 +449,12 @@ class ViewArea extends Component {
                 this.createSplitCameras();
                 this.createTextureMatrices();
 
-                this.shaderMaterial.uniforms.displayBorders.value = this.displayBorders ? 1 : 0;
-                this.shaderMaterial.uniforms.splitCount.value = this.CSMParameters.splitCount;
-                this.shaderMaterial.uniforms.cascadesBlendingFactor.value = this.CSMParameters.cascadesBlendingFactor;
-
-                //renderer.render(this.bufferScene, this.orthographicCameras[0]);
                 for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
                     renderer.setRenderTarget(this.bufferTextures[i]);
                     renderer.render(this.bufferScene, this.splitCameras[i]);
                 }
-            }
 
-            this.shaderMaterial.uniforms.enableCSM.value = this.CSMParameters.enabled ? 1 : 0;
-            this.shaderMaterial.uniforms.enableLiSPSM.value = this.LiSPSMParameters.enabled ? 1 : 0;
+            }
 
             if (this.CSMParameters.displayPixelAreas) {
                 let color = this.scene.background;
@@ -530,7 +486,7 @@ class ViewArea extends Component {
             renderer.render(this.scene, this.camera);
 
 
-            if (this.displayTextures) {
+            if (this.CSMParameters.displayTextures) {
                 this.debugScene.add(this.camera);
                 renderer.autoClear = false;
                 renderer.render(this.debugScene, this.camera);
@@ -627,7 +583,6 @@ class ViewArea extends Component {
             bumpTexture: {type: "t", value: bumpTexture},
             bumpScale: {type: "f", value: this.constants.terrainBumpScale},
             terrainTexture: {type: "t", value: terrain},
-            splitCount: {type: "i", value: this.CSMParameters.splitCount},
             vectorsTextures: {
                 type: "tv", value: this.bufferTextures.map(function (bt) {
                     if (bt !== null) {
@@ -637,11 +592,12 @@ class ViewArea extends Component {
                 })
             },
             textureMatrices: {type: "m4v", value: new Array(this.constants.maxSplitCount).fill(new THREE.Matrix4())},
-            displayBorders: {type: "i", value: 0},
-            cascadesBlendingFactor: {type: "f", value: this.CSMParameters.cascadesBlendingFactor},
+
+            //cascadesBlendingFactor: {type: "f", value: this.CSMParameters.cascadesBlendingFactor},
+            // uniforms that need updates from GUI
+            splitCount: {type: "i", value: this.CSMParameters.splitCount},displayBorders: {type: "i", value: 0},
             enableCSM: {type: "i", value: 1},
             displayPixelAreas: {type: "i", value: 0},
-            pixelAreaFactor: {type: "f", value: this.CSMParameters.pixelAreaFactor},
             resolution: {type: "f", value: this.CSMParameters.textureResolution}, // it doubles as both width and height of the texture
             enableLiSPSM: {type: "i", value: 0},
             displayPixels: {type: "i", value: 0}
@@ -670,49 +626,72 @@ class ViewArea extends Component {
         return plane;
     }
 
-    initBufferTexture() {
+    initBufferTextures() {
         for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
             this.bufferTextures[i] = new THREE.WebGLRenderTarget(this.CSMParameters.textureResolution, this.CSMParameters.textureResolution, {
                 minFilter: THREE.NearestFilter,
                 magFilter: THREE.NearestFilter
             });
         }
+        //this.loadBufferTexture();
+        this.loadBufferTextureForManySmallObjectsTest(20);
+    }
+
+    loadBufferTexture() {
         loadSVGToScene(mapUrl, this.bufferScene, -2900, 0, -3700, -Math.PI / 2, 0, 0, 2);
     }
 
-    // same as CSM split, refactoring possible
-    calculateTextureSizes(splitCount, splitLambda, initMin, initMax) {
-        let arr = [initMin];
-
-        for (let i = 1; i < splitCount; i++) {
-            let f = i / (splitCount - 1);
-            let l = initMin * Math.pow(initMax / initMin, f);
-            let u = initMin + (initMax - initMin) * f;
-            arr[i] = l * splitLambda + u * (1 - splitLambda);
+    loadBufferTextureForManySmallObjectsTest(objCount) {
+        function getRandomInt(min, max) {
+            min = Math.ceil(min);
+            max = Math.floor(max);
+            return Math.floor(Math.random() * (max - min + 1)) + min;
         }
-        return arr
+
+
+        this.objects = [] // change in runtime if necessary
+        for (let i = 0; i < objCount; i++) {
+            let x = getRandomInt(-3000, 3000);
+            let y = getRandomInt(-3000, 3000);
+            let width = getRandomInt(50, 300);
+            let geom;
+            if (Math.random() > 0.5) {
+                geom = new THREE.CircleGeometry(width, 128);
+            } else {
+                geom = new THREE.PlaneGeometry(width, width);
+            }
+            let mesh = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({color: new THREE.Color(Math.random() * 0xffffff)}));
+            mesh.position.set(x, 0, y);
+            mesh.rotation.set(-Math.PI / 2, 0, 0);
+            this.objects.push(mesh);
+            this.bufferScene.add(mesh);
+        }
+
+    }
+
+    loadBufferTextureForLargeObjectsTest() {
+
     }
 
     createSplitCameras() {
-        this.CSMParameters.maxSplitDistances = calculateMaxSplitDistances(
-            this.CSMParameters.maxSplitDistances,
+        this.CSMParameters.maxSplitDistances = calculateSplits(
             this.CSMParameters.splitCount,
             this.CSMParameters.splitLambda,
             this.CSMParameters.near,
             this.CSMParameters.far
         );
 
-        const textureSizes = this.calculateTextureSizes(
+        const textureSizes = calculateSplits(
             this.CSMParameters.splitCount,
             this.CSMParameters.splitLambda,
             this.stableCSMParameters.firstTextureSize,
             this.stableCSMParameters.projectedAreaSide
         );
 
-        let centerPosition = new THREE.Vector3();
-        this.terrain.getWorldPosition(centerPosition);
         for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
             let currentCamera = new THREE.PerspectiveCamera(this.camera.fov, this.camera.aspect, this.CSMParameters.maxSplitDistances[i], this.CSMParameters.maxSplitDistances[i + 1]);
+            /*currentCamera.near = 1;
+            currentCamera.updateProjectionMatrix();*/
             currentCamera.position.set(this.camera.position.x, this.camera.position.y, this.camera.position.z);
             currentCamera.rotation.set(this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z);
             currentCamera.updateMatrixWorld(true);
@@ -720,7 +699,7 @@ class ViewArea extends Component {
                 this.splitCameras[i] = getLightSpacePerspectiveCamera(currentCamera);
             } else {
                 if (this.stableCSMParameters.enabled) {
-                    this.splitCameras[i] = getStableOrthographicCameraForPerspectiveCamera(currentCamera, textureSizes[i], this.CSMParameters.textureResolution, centerPosition);
+                    this.splitCameras[i] = getStableOrthographicCameraForPerspectiveCamera(currentCamera, textureSizes[i], this.CSMParameters.textureResolution);
                 } else {
                     this.splitCameras[i] = getOrthographicCameraForPerspectiveCamera(currentCamera);
                 }
@@ -760,7 +739,56 @@ class ViewArea extends Component {
             maxValue = Math.max(maxValue, -pixels[i]);
         }
         this.CSMParameters.near = minValue;
-        this.CSMParameters.far = maxValue + this.CSMParameters.pushFar;
+        this.CSMParameters.far = maxValue;
+    }
+
+    updateMaterialUniformsFromParameters() {
+        let updateUniform = (uniform, value) => {
+            if (value !== this.shaderMaterial.uniforms[uniform].value) {
+                this.shaderMaterial.uniforms[uniform].value = value;
+            }
+        }
+
+        updateUniform('enableCSM', this.CSMParameters.enabled);
+        updateUniform('splitCount', this.CSMParameters.splitCount);
+        updateUniform('resolution', this.CSMParameters.textureResolution);
+        updateUniform('enableLiSPSM', this.LiSPSMParameters.enabled);
+        updateUniform('displayPixels', this.CSMParameters.displayPixels);
+        updateUniform('displayPixelAreas', this.CSMParameters.displayPixelAreas);
+        updateUniform('displayBorders', this.CSMParameters.displayBorders);
+    }
+
+    resizeTextures() {
+        if (this.CSMParameters.textureResolution !== this.shaderMaterial.uniforms.resolution.value) {
+            for (let i = 0; i < this.CSMParameters.splitCount; i++) {
+                if (this.bufferTextures[i] !== null) {
+                    this.bufferTextures[i].setSize(this.CSMParameters.textureResolution, this.CSMParameters.textureResolution);
+                }
+            }
+        }
+    }
+
+    runPerformanceTest(stats) {
+        let pos = this.performanceTestParameters.testCameraData.positions[this.performanceTestParameters.testCameraDataIndex];
+        let rotation = this.performanceTestParameters.testCameraData.rotations[this.performanceTestParameters.testCameraDataIndex]
+
+        this.performanceTestParameters.fpsSum += stats.fps;
+        this.performanceTestParameters.timeSum += stats.time;
+        this.performanceTestParameters.fpsCount++;
+
+        this.camera.position.set(pos.x, pos.y, pos.z);
+        this.camera.rotation.set(rotation.x, rotation.y, rotation.z);
+        this.performanceTestParameters.testCameraDataIndex++;
+        if (this.performanceTestParameters.testCameraDataIndex === this.performanceTestParameters.testCameraData.positions.length) {
+            console.log("Average FPS ", this.performanceTestParameters.fpsSum / this.performanceTestParameters.fpsCount);
+            console.log("Average time ", this.performanceTestParameters.timeSum / this.performanceTestParameters.fpsCount);
+            this.performanceTestParameters.running = false;
+            this.performanceTestParameters.fpsSum = 0;
+            this.performanceTestParameters.timeSum = 0;
+            this.performanceTestParameters.fpsCount = 0;
+            this.performanceTestParameters.testCameraDataIndex = 0;
+        }
+
     }
 }
 

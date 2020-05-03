@@ -1,10 +1,5 @@
 const int MAX_SPLITS = 10;
 
-uniform sampler2D oceanTexture;
-uniform sampler2D sandyTexture;
-uniform sampler2D grassTexture;
-uniform sampler2D rockyTexture;
-uniform sampler2D snowyTexture;
 uniform sampler2D terrainTexture;
 
 uniform sampler2D vectorsTextures[MAX_SPLITS];
@@ -18,7 +13,6 @@ uniform int enableLiSPSM;
 uniform int displayPixels;
 
 uniform int displayPixelAreas;
-uniform float pixelAreaFactor;
 uniform float resolution;
 
 uniform mat4 textureMatrices[MAX_SPLITS];
@@ -70,15 +64,16 @@ bool get_projected_texture_color(vec4 coord, int idx, out vec4 color) {
     }
 
     if (displayPixels == 1) {
-      if (color.w != 0.0) {
-        tex_coord.x *= resolution;
-        tex_coord.y *= resolution;
-        if (fract(tex_coord.x) <= 0.1 || fract(tex_coord.y) <= 0.1 || fract(tex_coord.x) >= 0.9 || fract(tex_coord.y) >= 0.9) {
-          color = vec4(1, 0, 0, 1);
-        } else {
-          color = vec4(0, 1, 0, 1);
-        }
+      tex_coord.x *= resolution;
+      tex_coord.y *= resolution;
+      if (fract(tex_coord.x) <= 0.05 || fract(tex_coord.y) <= 0.05 || fract(tex_coord.x) >= 0.95 || fract(tex_coord.y) >= 0.95) {
+        color = mix(texture2D(terrainTexture, vUV), vec4(1, 0, 0, 0.1), 0.4);
+      } else {
+        color.w = 0.0;
       }
+      /*if (color.w != 0.0) {
+
+      }*/
     }
 
     if (displayBorders == 1) {
@@ -109,7 +104,8 @@ void main() {
       vec3 projected_c = projected_texcoords[i].xyz / projected_texcoords[i].w;
 
       if (displayPixelAreas == 1) {
-        if (inRange(projected_c.xy)) {
+        vec2 c = enableLiSPSM == 1 ? projected_c.xz : projected_c.xy;
+        if (inRange(c)) {
           vec4 dx = dFdx(posWS);
           vec4 dy = dFdy(posWS);
           vec4 p1 = vec4(posWS + dx / 2.0 + dy / 2.0) * textureMatrices[i];
