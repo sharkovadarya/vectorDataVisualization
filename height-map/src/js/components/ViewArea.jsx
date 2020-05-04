@@ -410,8 +410,7 @@ class ViewArea extends Component {
                     // restore default renderer parameters
                     renderer.setViewport(0, 0, canvas.width, canvas.height);
                     renderer.setClearColor(clearColor, clearAlpha);
-                }
-*/
+                }*/
                 this.createSplitCameras();
                 this.createTextureMatrices();
 
