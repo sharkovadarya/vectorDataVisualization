@@ -41,6 +41,7 @@
     "three": "^0.112.1",
     "dat.gui": "^0.7.6",
     "stats-js": "^1.0.1",
-    "jquery": "^3.5.0"
+    "jquery": "^3.5.0",
+    "range-inclusive": "^1.0.2"
   }
 }

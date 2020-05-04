@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import {OrbitControls} from "three/examples/jsm/controls/OrbitControls";
 import * as dat from 'dat.gui'
 import $ from 'jquery';
+import rangeInclusive from 'range-inclusive';
 
 // this is stats-js but with additional public fields
 import Stats from './FPSStats';
@@ -79,7 +80,6 @@ class ViewArea extends Component {
 
         this.splitCameras = [];
         this.bufferTextures = new Array(this.constants.maxSplitCount).fill(null);
-        this.lightSpacePerspectiveMatrices = [];
 
 
         // for zMin - zMax calculations
@@ -111,6 +111,50 @@ class ViewArea extends Component {
             fpsCount: 0,
         }
 
+        const runPerformanceTestFromJSON = (json) => {
+            function parseVector3JSON(v) {
+                if (v._x !== undefined) {
+                    return new THREE.Vector3(v._x, v._y, v._z);
+                } else if (v.x !== undefined) {
+                    return new THREE.Vector3(v.x, v.y, v.z);
+                }
+            }
+
+            this.performanceTestParameters.testCameraDataIndex = 0;
+            if (this.performanceTestParameters.testCameraData.rotations.length === 0) {
+                let data = json.data;
+                for (let i = 0; i < data.length; i += 2) {
+                    this.performanceTestParameters.testCameraData.rotations.push(parseVector3JSON(data[i]));
+                    this.performanceTestParameters.testCameraData.positions.push(parseVector3JSON(data[i + 1]));
+                }
+            }
+
+            this.performanceTestParameters.running = true;
+        };
+
+        const addFrustum = () => {
+            this.scene.add(new THREE.CameraHelper(this.camera.clone()));
+            for (let i = 0; i < this.CSMParameters.splitCount; i++) {
+                this.scene.add(new THREE.CameraHelper(this.splitCameras[i].clone()));
+            }
+        };
+
+        const runResolutionPrecisionTest = () => {
+            this.setupPrecisionTest('textureResolution', rangeInclusive(512, 2048, 1));
+        };
+
+        const runCascadesPrecisionTest = () => {
+            this.setupPrecisionTest('splitCount', rangeInclusive(1, 10, 1));
+        };
+
+        const runSplitPrecisionTest = () => {
+            this.setupPrecisionTest('splitLambda', rangeInclusive(0, 1, 0.01));
+        };
+
+        const runProjectedAreaSideTest = () => {
+            this.setupPrecisionTest('projectedAreaSide', rangeInclusive(5000, 30000, 100));
+        }
+
         const DataDisplayParameters = function () {
             this.CSMEnabled = true;
 
@@ -129,139 +173,45 @@ class ViewArea extends Component {
 
             this.cascadesBlendingFactor = 0.1;
 
-            this.passesCount = refs.CSMParameters.passesCount;
-            this.passesFactor = refs.CSMParameters.passesFactor;
+            this.passesCount = 11;
+            this.passesFactor = 2;
 
             this.displayPixels = false;
+            this.displayPixelAreas = false;
+            this.LiSPSMEnabled = false;
 
             this.addFrustum = function() {
-                refs.scene.add(new THREE.CameraHelper(refs.camera.clone()));
-                for (let i = 0; i < refs.CSMParameters.splitCount; i++) {
-                    refs.scene.add(new THREE.CameraHelper(refs.splitCameras[i].clone()));
-                }
+                addFrustum();
             };
 
             // this one is just for debug and does whatever. the title is misleading. will be fixed one day
             this.addPerspectiveFrustum = function() {
                 let cam = getLightSpacePerspectiveCamera(refs.camera, refs.scene);
                 refs.scene.add(new THREE.CameraHelper(cam.clone()));
-                //refs.scene.add(new THREE.CameraHelper(refs.splitCameras[0]));
                 refs.camera.far = 40000;
                 refs.camera.updateProjectionMatrix();
-                //getLightSpacePerspectiveCamera(refs.camera);
-                /*let camera = getLightSpacePerspectiveCamera(refs.camera, 1);
-                refs.scene.add(new THREE.CameraHelper(camera.clone()));
-                refs.scene.add(new THREE.CameraHelper(refs.camera.clone()));*/
             }
 
             this.runPerformanceTest = function() {
                 $.getJSON("src/json/camera.json", function(json) {
-                    // we know its format
-                    // threejs doesn't have vector parsing apparently
-                    function parseVector3JSON(v) {
-                        if (v._x !== undefined) {
-                            return new THREE.Vector3(v._x, v._y, v._z);
-                        } else if (v.x !== undefined) {
-                            return new THREE.Vector3(v.x, v.y, v.z);
-                        }
-                    }
-
-                    refs.performanceTestParameters.testCameraDataIndex = 0;
-                    if (refs.performanceTestParameters.testCameraData.rotations.length === 0 || refs.performanceTestParameters.testCameraData.positions.length === 0) {
-                        let data = json.data;
-                        for (let i = 0; i < data.length; i += 2) {
-                            refs.performanceTestParameters.testCameraData.rotations.push(parseVector3JSON(data[i]));
-                            refs.performanceTestParameters.testCameraData.positions.push(parseVector3JSON(data[i + 1]));
-                        }
-                    }
-
-                    refs.performanceTestParameters.running = true;
+                    runPerformanceTestFromJSON(json);
                 });
-            }
-
-            this.setCameraForPrecisionTest = function () {
-                refs.camera.position.set(0, 3000, 0);
-                refs.camera.rotation.set(-Math.PI / 2, 0, 0);
-            }
+            };
 
             this.runResolutionPrecisionTest = function () {
-                this.setCameraForPrecisionTest()
-                if (this.precisionTestParameters.textureResolution.length === 0) {
-                    for (let i = 512; i <= 1536; i++) {
-                        this.precisionTestParameters.textureResolution.push(i);
-                    }
-                }
-                this.precisionTestParameters.textureResolutionIndex = 0;
-                this.precisionTestParameters.running = true;
-                console.log("running precision test for resolution");
+                runResolutionPrecisionTest();
             }
 
             this.runCascadesPrecisionTest = function () {
-                this.setCameraForPrecisionTest()
-                if (this.precisionTestParameters.splitCount.length === 0) {
-                    for (let i = 1; i <= 10; i++) {
-                        this.precisionTestParameters.splitCount.push(i);
-                    }
-                }
-                this.precisionTestParameters.splitCountIndex = 0;
-                this.precisionTestParameters.running = true;
-                console.log("running precision test for cascades");
+                runCascadesPrecisionTest();
             }
 
             this.runSplitPrecisionTest = function () {
-                this.setCameraForPrecisionTest()
-                if (this.precisionTestParameters.splitLambda.length === 0) {
-                    for (let i = 0; i <= 1; i += 0.01) {
-                        this.precisionTestParameters.splitLambda.push(i);
-                    }
-                }
-                this.precisionTestParameters.splitLambdaIndex = 0;
-                this.precisionTestParameters.running = true;
-                console.log("running precision test for splits");
+                runSplitPrecisionTest();
             }
 
             this.runProjectionAreaPrecisionTest = function () {
-                this.setCameraForPrecisionTest()
-                if (this.precisionTestParameters.projectedAreaSide.length === 0) {
-                    for (let i = 5000; i <= 30000; i += 100) {
-                        this.precisionTestParameters.projectedAreaSide.push(i);
-                    }
-                }
-                this.precisionTestParameters.projectedAreaSideIndex = 0;
-                this.precisionTestParameters.running = true;
-                console.log("running precision test for projection area");
-            }
-
-            this.precisionTestParameters = {
-                running: false,
-                textureResolution: [],
-                splitCount: [],
-                projectedAreaSide: [],
-                splitLambda: [],
-                textureResolutionIndex: -1,
-                splitLambdaIndex: -1,
-                splitCountIndex: -1,
-                projectedAreaSideIndex: -1
-            }
-
-            this.displayPixelAreas = false;
-
-            this.LiSPSMEnabled = false;
-
-
-            this.runPrecisionTest = function(name) {
-                if (this.precisionTestParameters.running) {
-                    if (this.precisionTestParameters[`${name}Index`] !== -1) {
-                        this[name] = this.precisionTestParameters[name][this.precisionTestParameters[`${name}Index`]++];
-                        if (this.precisionTestParameters[`${name}Index`] === this.precisionTestParameters[name].length) {
-                            this.precisionTestParameters.running = false;
-                            this.precisionTestParameters[[`${name}Index`]] = 0;
-                            console.log(`precision test for ${name} finished`);
-                            saveText(JSON.stringify(refs.testResults), `${name}.json`);
-                            refs.testResults = [];
-                        }
-                    }
-                }
+                runProjectedAreaSideTest();
             }
         };
 
@@ -303,7 +253,7 @@ class ViewArea extends Component {
             CSMEnabled.onFinishChange((value) => {
                 updateCSMParametersValue('enabled', value);
             });
-            let splitCount = gui.add(parameters, 'splitCount').min(1).max(refs.constants.maxSplitCount).step(1);
+            let splitCount = gui.add(parameters, 'splitCount').min(1).max(10).step(1);
             splitCount.onChange((value) => {
                 updateCSMParametersValue('splitCount', value);
             });
@@ -412,8 +362,6 @@ class ViewArea extends Component {
         let debugTarget = new THREE.WebGLRenderTarget(canvas.width, canvas.height, {type: THREE.FloatType});
 
         let then = 0;
-        let fpsSum = 0, fpsCount = 0;
-        let timeSum = 0;
         const renderLoopTick = (now) => {
             this.debugCount++;
             now *= 0.001;
@@ -425,6 +373,10 @@ class ViewArea extends Component {
 
             if (this.performanceTestParameters.running) {
                 this.runPerformanceTest(stats);
+            }
+
+            if (this.precisionTestParameters.running) {
+                this.runPrecisionTest(this.precisionTestParameters.currentAttribute);
             }
 
             if (this.CSMParameters.enabled) {
@@ -787,9 +739,52 @@ class ViewArea extends Component {
             this.performanceTestParameters.fpsCount = 0;
             this.performanceTestParameters.testCameraDataIndex = 0;
         }
+    }
 
+
+
+    precisionTestParameters = {
+        running: false,
+        textureResolution: [],
+        splitCount: [],
+        projectedAreaSide: [],
+        splitLambda: [],
+        textureResolutionIndex: -1,
+        splitLambdaIndex: -1,
+        splitCountIndex: -1,
+        projectedAreaSideIndex: -1,
+        currentAttribute: null
+    }
+
+    setupPrecisionTest(parameter, range) {
+        this.camera.position.set(0, 3000, 0);
+        this.camera.rotation.set(-Math.PI / 2, 0, 0);
+        this.CSMParameters.displayPixelAreas = true;
+        this.precisionTestParameters[parameter] = range;
+        this.precisionTestParameters[`${parameter}Index`] = 0;
+        this.precisionTestParameters.running = true;
+        this.precisionTestParameters.currentAttribute = parameter;
+        this.testResults = [];
+        console.log("running precision test for ", parameter);
+    };
+
+    runPrecisionTest(parameter) {
+        if (this.CSMParameters[parameter] !== undefined) {
+            this.CSMParameters[parameter] = this.precisionTestParameters[parameter][this.precisionTestParameters[`${parameter}Index`]++];
+        } else if (this.stableCSMParameters[parameter] !== undefined) {
+            this.stableCSMParameters[parameter] = this.precisionTestParameters[parameter][this.precisionTestParameters[`${parameter}Index`]++];
+        }
+        if (this.precisionTestParameters[`${parameter}Index`] === this.precisionTestParameters[parameter].length) {
+            this.precisionTestParameters.running = false;
+            this.precisionTestParameters[[`${parameter}Index`]] = 0;
+            this.precisionTestParameters.currentAttribute = null;
+            console.log(`precision test for ${parameter} finished`);
+            saveText(JSON.stringify(this.testResults), `${parameter}.json`);
+            this.testResults = [];
+        }
     }
 }
+
 
 const mapStateToProps = (state /*, ownProps*/) => {
     return {
