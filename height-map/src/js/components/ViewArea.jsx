@@ -218,7 +218,9 @@ class ViewArea extends Component {
         this.debugCount = 0;
 
         this.testResults = [];
+        this.dynamicData = true;
 
+        // TODO remove this later
         let refs = this;
         let updateParametersValue = (parametersGroup, parameterName, value) => {
             this[parametersGroup][parameterName] = value;
@@ -370,6 +372,12 @@ class ViewArea extends Component {
 
             this.resizeTextures();
             this.updateMaterialUniformsFromParameters();
+
+            if (this.dynamicData && this.objects !== undefined) {
+                for (let i = 0; i < this.objects.length; i++) {
+                    this.objects[i].position.add(this.directions[i]);
+                }
+            }
 
             if (this.performanceTestParameters.running) {
                 this.runPerformanceTest(stats);
@@ -585,26 +593,26 @@ class ViewArea extends Component {
             });
         }
         //this.loadBufferTexture();
-        this.loadBufferTextureForManySmallObjectsTest(20);
+        this.generateBufferTextureObjects(2000);
     }
 
     loadBufferTexture() {
         loadSVGToScene(mapUrl, this.bufferScene, -2900, 0, -3700, -Math.PI / 2, 0, 0, 2);
     }
 
-    loadBufferTextureForManySmallObjectsTest(objCount) {
+    generateBufferTextureObjects(objCount, minSize = 50, maxSize = 300) {
         function getRandomInt(min, max) {
             min = Math.ceil(min);
             max = Math.floor(max);
             return Math.floor(Math.random() * (max - min + 1)) + min;
         }
 
-
-        this.objects = [] // change in runtime if necessary
+        this.objects = []; // change in runtime if necessary
+        this.directions = [];
         for (let i = 0; i < objCount; i++) {
             let x = getRandomInt(-3000, 3000);
             let y = getRandomInt(-3000, 3000);
-            let width = getRandomInt(50, 300);
+            let width = getRandomInt(minSize, maxSize);
             let geom;
             if (Math.random() > 0.5) {
                 geom = new THREE.CircleGeometry(width, 128);
@@ -615,13 +623,10 @@ class ViewArea extends Component {
             mesh.position.set(x, 0, y);
             mesh.rotation.set(-Math.PI / 2, 0, 0);
             this.objects.push(mesh);
+            // add a direction for each object
+            this.directions.push(new THREE.Vector3(Math.random() > 0.5 ? 1 : -1, Math.random() > 0.5 ? 1 : -1, Math.random() > 0.5 ? 1 : -1))
             this.bufferScene.add(mesh);
         }
-
-    }
-
-    loadBufferTextureForLargeObjectsTest() {
-
     }
 
     createSplitCameras() {
