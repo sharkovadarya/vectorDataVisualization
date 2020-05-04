@@ -363,6 +363,13 @@ class ViewArea extends Component {
 
         let debugTarget = new THREE.WebGLRenderTarget(canvas.width, canvas.height, {type: THREE.FloatType});
 
+        let lispsmMatrix = new THREE.Matrix4().fromArray([
+            1, 0, 0, 0,
+            0, 0, 1, 0,
+            0, 1, 0, 0,
+            0, 0, 0, 1
+        ]);
+
         let then = 0;
         const renderLoopTick = (now) => {
             this.debugCount++;
@@ -388,7 +395,7 @@ class ViewArea extends Component {
             }
 
             if (this.CSMParameters.enabled) {
-                if (!this.stableCSMParameters.enabled) {
+                /*if (!this.stableCSMParameters.enabled) {
                     // set composer renderer parameters
                     this.composer.renderer.setClearColor(new THREE.Color(1e9, -1e9, 0), 1);
                     this.composer.renderer.setViewport(0, 0, Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
@@ -404,11 +411,14 @@ class ViewArea extends Component {
                     renderer.setViewport(0, 0, canvas.width, canvas.height);
                     renderer.setClearColor(clearColor, clearAlpha);
                 }
-
+*/
                 this.createSplitCameras();
                 this.createTextureMatrices();
 
                 for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
+                    if (this.LiSPSMParameters.enabled) {
+                        this.splitCameras[i].projectionMatrix.premultiply(lispsmMatrix);
+                    }
                     renderer.setRenderTarget(this.bufferTextures[i]);
                     renderer.render(this.bufferScene, this.splitCameras[i]);
                 }
@@ -592,8 +602,8 @@ class ViewArea extends Component {
                 magFilter: THREE.NearestFilter
             });
         }
-        //this.loadBufferTexture();
-        this.generateBufferTextureObjects(2000);
+        this.loadBufferTexture();
+        //this.generateBufferTextureObjects(2000);
     }
 
     loadBufferTexture() {
@@ -652,7 +662,7 @@ class ViewArea extends Component {
             currentCamera.rotation.set(this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z);
             currentCamera.updateMatrixWorld(true);
             if (this.LiSPSMParameters.enabled) {
-                this.splitCameras[i] = getLightSpacePerspectiveCamera(currentCamera);
+                this. splitCameras[i] = getLightSpacePerspectiveCamera(currentCamera);
             } else {
                 if (this.stableCSMParameters.enabled) {
                     this.splitCameras[i] = getStableOrthographicCameraForPerspectiveCamera(currentCamera, textureSizes[i], this.CSMParameters.textureResolution);
