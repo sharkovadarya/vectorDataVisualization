@@ -279,7 +279,6 @@ class ViewArea extends Component {
                 updateCSMParametersValue('displayPixels', value);
             });
             gui.add(parameters, 'addFrustum');
-            gui.add(parameters, 'addPerspectiveFrustum');
 
             gui.add(parameters, 'runPerformanceTest');
 

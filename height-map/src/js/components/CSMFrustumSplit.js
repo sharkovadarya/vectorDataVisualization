@@ -170,7 +170,7 @@ export function getLightSpacePerspectiveCamera(camera, scene) {
 
 
     // slightly pushing near and far: it doesn't warp the result in any way but works better for FOV calculation
-    const perspectiveCamera = new THREE.PerspectiveCamera(20, 1, N - 2, F + 2);
+    const perspectiveCamera = new THREE.PerspectiveCamera(10, 1, N - 2, F + 2);
     perspectiveCamera.position.set(newPos.x, newPos.y, newPos.z);
     perspectiveCamera.lookAt(newPos.clone().add(projDir));
     perspectiveCamera.updateMatrix();
