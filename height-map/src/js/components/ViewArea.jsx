@@ -184,14 +184,6 @@ class ViewArea extends Component {
                 addFrustum();
             };
 
-            // this one is just for debug and does whatever. the title is misleading. will be fixed one day
-            this.addPerspectiveFrustum = function() {
-                let cam = getLightSpacePerspectiveCamera(refs.camera, refs.scene);
-                refs.scene.add(new THREE.CameraHelper(cam.clone()));
-                refs.camera.far = 40000;
-                refs.camera.updateProjectionMatrix();
-            }
-
             this.runPerformanceTest = function() {
                 $.getJSON("src/json/camera.json", function(json) {
                     runPerformanceTestFromJSON(json);
@@ -345,7 +337,7 @@ class ViewArea extends Component {
             return;
         }
 
-        this.camera = this.createCamera(canvas, 0, 2500, 800);
+        this.camera = this.createCamera(canvas, 1000, 1000, 800);
         this.camera.name = "camera";
         this.controls = this.createControls(canvas, this.camera);
 
@@ -395,7 +387,7 @@ class ViewArea extends Component {
             }
 
             if (this.CSMParameters.enabled) {
-                /*if (!this.stableCSMParameters.enabled) {
+                if (!this.stableCSMParameters.enabled) {
                     // set composer renderer parameters
                     this.composer.renderer.setClearColor(new THREE.Color(1e9, -1e9, 0), 1);
                     this.composer.renderer.setViewport(0, 0, Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
@@ -410,7 +402,7 @@ class ViewArea extends Component {
                     // restore default renderer parameters
                     renderer.setViewport(0, 0, canvas.width, canvas.height);
                     renderer.setClearColor(clearColor, clearAlpha);
-                }*/
+                }
                 this.createSplitCameras();
                 this.createTextureMatrices();
 
@@ -661,7 +653,7 @@ class ViewArea extends Component {
             currentCamera.rotation.set(this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z);
             currentCamera.updateMatrixWorld(true);
             if (this.LiSPSMParameters.enabled) {
-                this. splitCameras[i] = getLightSpacePerspectiveCamera(currentCamera);
+                this.splitCameras[i] = getLightSpacePerspectiveCamera(currentCamera);
             } else {
                 if (this.stableCSMParameters.enabled) {
                     this.splitCameras[i] = getStableOrthographicCameraForPerspectiveCamera(currentCamera, textureSizes[i], this.CSMParameters.textureResolution);

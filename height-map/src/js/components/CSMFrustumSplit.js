@@ -95,7 +95,7 @@ function quantize(value, quant) {
     return quant * Math.floor(value / quant);
 }
 
-export function getLightSpacePerspectiveCamera(camera) {
+export function getLightSpacePerspectiveCamera(camera, scene) {
     let frustumCorners = calculateCameraFrustumCorners(camera);
     let center = new THREE.Vector3();
     for (let i = 0; i < frustumCorners.length; i++) {
@@ -103,13 +103,13 @@ export function getLightSpacePerspectiveCamera(camera) {
     }
     center.divideScalar(frustumCorners.length);
 
-    let points = frustumCorners.map(it => it.clone().sub(camera.position));
-
     let camDir = new THREE.Vector3();
     camera.getWorldDirection(camDir);
     let projDir = camDir.clone();
     projDir.y = 0;
     projDir.normalize();
+
+    let points = frustumCorners.map(it => it.clone().sub(camera.position));
 
     let nearestPoint = null;
     let farthestPoint = null;
@@ -169,15 +169,35 @@ export function getLightSpacePerspectiveCamera(camera) {
     newPos.sub(projDir.clone().multiplyScalar(N));
 
 
-    // i know we care about the horizontal fov but consider this: it doesn't work anyway
-    const perspectiveCamera = new THREE.PerspectiveCamera(150, 1, N, F);
+    // slightly pushing near and far: it doesn't warp the result in any way but works better for FOV calculation
+    const perspectiveCamera = new THREE.PerspectiveCamera(20, 1, N - 2, F + 2);
     perspectiveCamera.position.set(newPos.x, newPos.y, newPos.z);
     perspectiveCamera.lookAt(newPos.clone().add(projDir));
     perspectiveCamera.updateMatrix();
     perspectiveCamera.updateMatrixWorld(true);
     perspectiveCamera.updateProjectionMatrix();
 
+    if (scene !== undefined) {
+        let geom = new THREE.Geometry();
+        for (let c of frustumCorners) {
+            geom.vertices.push(c);
+        }
+        scene.add(new THREE.Points(geom, new THREE.PointsMaterial({size: 100, color: 'magenta'})));
+    }
 
+    while (perspectiveCamera.fov < 179) {
+        let frustum = new THREE.Frustum().setFromMatrix(new THREE.Matrix4().multiplyMatrices(perspectiveCamera.projectionMatrix, perspectiveCamera.matrixWorldInverse));
+        let containsAllPoints = true;
+        frustumCorners.forEach(c => {
+            if (!frustum.containsPoint(c)) {
+                containsAllPoints = false;
+            }
+        });
+        if (containsAllPoints) {
+            break;
+        }
+        perspectiveCamera.fov++;
+        perspectiveCamera.updateProjectionMatrix();
+    }
     return perspectiveCamera;
 }
-
