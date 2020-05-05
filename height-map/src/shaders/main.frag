@@ -108,12 +108,28 @@ void main() {
         if (inRange(c)) {
           vec4 dx = dFdx(posWS);
           vec4 dy = dFdy(posWS);
-          vec4 p1 = vec4(posWS + dx / 2.0 + dy / 2.0) * textureMatrices[i];
-          vec4 p2 = vec4(posWS - dx / 2.0 + dy / 2.0) * textureMatrices[i];
-          vec4 p3 = vec4(posWS + dx / 2.0 - dy / 2.0) * textureMatrices[i];
-          vec4 p4 = vec4(posWS - dx / 2.0 - dy / 2.0) * textureMatrices[i];
-          float area1 = calculateTriangleArea(p1.xy, p2.xy, p4.xy);
-          float area2 = calculateTriangleArea(p1.xy, p3.xy, p4.xy);
+          vec4 p1 = textureMatrices[i] * vec4(posWS + dx / 2.0 + dy / 2.0);
+          vec4 p2 = textureMatrices[i] * vec4(posWS - dx / 2.0 + dy / 2.0);
+          vec4 p3 = textureMatrices[i] * vec4(posWS + dx / 2.0 - dy / 2.0);
+          vec4 p4 = textureMatrices[i] * vec4(posWS - dx / 2.0 - dy / 2.0);
+          float area1;
+          float area2;
+
+          p1 /= p1.w;
+          p2 /= p2.w;
+          p3 /= p3.w;
+          p4 /= p4.w;
+
+          if (enableLiSPSM == 1) {
+          area1 = calculateTriangleArea(p1.xz, p2.xz, p4.xz);
+          area2 = calculateTriangleArea(p1.xz, p3.xz, p4.xz);
+
+          } else {
+          area1 = calculateTriangleArea(p1.xy, p2.xy, p4.xy);
+          area2 = calculateTriangleArea(p1.xy, p3.xy, p4.xy);
+
+          }
+
           float r = (area1 + area2) * resolution * resolution;
           color = vec4(r, r, r, 1);
         }
