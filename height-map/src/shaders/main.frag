@@ -93,6 +93,56 @@ float calculateTriangleArea(vec2 a, vec2 b, vec2 c) {
   return abs(a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y)) / 2.0;
 }
 
+float distanceToSquared(vec2 a, vec2 b) {
+  return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
+}
+
+float calculateQuadrangleArea(vec2 a, vec2 b, vec2 c, vec2 d) {
+  float maxDist = distanceToSquared(a, b);
+  vec2 p1 = a, p2 = b, p3 = c, p4 = d;
+  float ac = distanceToSquared(a, c);
+  float ad = distanceToSquared(a, d);
+  float bc = distanceToSquared(b, c);
+  float bd = distanceToSquared(b, d);
+  float cd = distanceToSquared(c, d);
+  if (ac > maxDist) {
+    maxDist = ac;
+    p1 = a;
+    p2 = c;
+    p3 = b;
+    p4 = d;
+  }
+  if (ad > maxDist) {
+    maxDist = ad;
+    p1 = a;
+    p2 = d;
+    p3 = b;
+    p4 = c;
+  }
+  if (bc > maxDist) {
+    maxDist = bc;
+    p1 = b;
+    p2 = c;
+    p3 = a;
+    p4 = d;
+  }
+  if (bd > maxDist) {
+    maxDist = bd;
+    p1 = b;
+    p2 = d;
+    p3 = a;
+    p4 = c;
+  }
+  if (cd > maxDist) {
+    maxDist = cd;
+    p1 = c;
+    p2 = d;
+    p3 = a;
+    p4 = b;
+  }
+  return calculateTriangleArea(p1, p2, p3) + calculateTriangleArea(p1, p2, p4);
+}
+
 void main() {
   vec4 color = vec4(-1.0, 0.0, 0.0, 0.0);
 
@@ -120,18 +170,13 @@ void main() {
           p3 /= p3.w;
           p4 /= p4.w;
 
+          float r;
           if (enableLiSPSM == 1) {
-          area1 = calculateTriangleArea(p1.xz, p2.xz, p4.xz);
-          area2 = calculateTriangleArea(p1.xz, p3.xz, p4.xz);
-
+            r = calculateQuadrangleArea(p1.xz, p2.xz, p3.xz, p4.xz) * resolution * resolution;
           } else {
-          area1 = calculateTriangleArea(p1.xy, p2.xy, p4.xy);
-          area2 = calculateTriangleArea(p1.xy, p3.xy, p4.xy);
-
+            r = calculateQuadrangleArea(p1.xy, p2.xy, p3.xy, p4.xy) * resolution * resolution;
           }
-
-          float r = (area1 + area2) * resolution * resolution;
-          color = vec4(r, r, r, 1);
+          color = vec4(r, r, r, 0.42);
         }
       } else {
         if (get_projected_texture_color(projected_texcoords[i], i, color)) {

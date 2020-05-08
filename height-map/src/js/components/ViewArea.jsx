@@ -59,12 +59,12 @@ class ViewArea extends Component {
             passesFactor: 2,
             displayPixelAreas: false,
             displayBorders: true,
-            displayTextures: true,
+            displayTextures: false,
             displayPixels: false
         };
 
         this.stableCSMParameters = {
-            enabled: true,
+            enabled: false,
             firstTextureSize: 50,
             projectedAreaSide: 5000
         };
@@ -139,20 +139,9 @@ class ViewArea extends Component {
             }
         };
 
-        const runResolutionPrecisionTest = () => {
-            this.setupPrecisionTest('textureResolution', rangeInclusive(512, 2048, 1));
-        };
-
-        const runCascadesPrecisionTest = () => {
-            this.setupPrecisionTest('splitCount', rangeInclusive(1, 10, 1));
-        };
-
-        const runSplitPrecisionTest = () => {
-            this.setupPrecisionTest('splitLambda', rangeInclusive(0, 1, 0.01));
-        };
-
-        const runProjectedAreaSideTest = () => {
-            this.setupPrecisionTest('projectedAreaSide', rangeInclusive(5000, 30000, 100));
+        const runPrecisionTest = () => {
+            this.generateParameters();
+            this.CSMParameters.displayPixelAreas = true;
         }
 
         const DataDisplayParameters = function () {
@@ -167,7 +156,7 @@ class ViewArea extends Component {
 
             this.textureResolution = 512;
 
-            this.stable = true;
+            this.stable = false;
             this.firstTextureSize = 50;
             this.projectedAreaSide = 5000;
 
@@ -190,20 +179,8 @@ class ViewArea extends Component {
                 });
             };
 
-            this.runResolutionPrecisionTest = function () {
-                runResolutionPrecisionTest();
-            }
-
-            this.runCascadesPrecisionTest = function () {
-                runCascadesPrecisionTest();
-            }
-
-            this.runSplitPrecisionTest = function () {
-                runSplitPrecisionTest();
-            }
-
-            this.runProjectionAreaPrecisionTest = function () {
-                runProjectedAreaSideTest();
+            this.runPrecisionTest = function() {
+                runPrecisionTest();
             }
         };
 
@@ -279,6 +256,7 @@ class ViewArea extends Component {
                 updateCSMParametersValue('displayPixels', value);
             });
             gui.add(parameters, 'addFrustum');
+            gui.add(parameters, 'runPrecisionTest');
 
             gui.add(parameters, 'runPerformanceTest');
 
@@ -321,12 +299,6 @@ class ViewArea extends Component {
             LiSPSMEnabled.onFinishChange((value) => {
                 updateParametersValue('LiSPSMParameters', 'enabled', value);
             });
-
-            const precisionTestFolder = gui.addFolder('Precision Test');
-            precisionTestFolder.add(parameters, 'runResolutionPrecisionTest');
-            precisionTestFolder.add(parameters, 'runCascadesPrecisionTest');
-            precisionTestFolder.add(parameters, 'runSplitPrecisionTest');
-            precisionTestFolder.add(parameters, 'runProjectionAreaPrecisionTest');
         };
     }
 
@@ -368,6 +340,82 @@ class ViewArea extends Component {
             const deltaTime = now - then;
             then = now;
 
+            if (this.testIdx !== undefined) {
+                switch (this.currentAlgorithm) {
+                    case "USM":
+                        if (this.testIdx === this.USMTestParameters.length) {
+                            this.currentAlgorithm = "CSM";
+                            this.testIdx = 0;
+                        } else {
+                            this.stableCSMParameters.enabled = false;
+                            this.LiSPSMParameters.enabled = false;
+                            this.CSMParameters.splitCount = 1;
+                            this.CSMParameters.textureResolution = this.USMTestParameters[this.testIdx].textureResolution;
+                            let pos = this.USMTestParameters[this.testIdx].position;
+                            this.camera.position.set(pos.x, pos.y, pos.z);
+                            let rot = this.USMTestParameters[this.testIdx].rotation;
+                            this.camera.rotation.set(rot.x, rot.y, rot.z);
+                            this.testIdx++;
+                        }
+                        break;
+                    case "CSM":
+                        if (this.testIdx === this.CSMTestParameters.length) {
+                            this.currentAlgorithm = "StableCSM";
+                            this.testIdx = 0;
+                        } else {
+                            // yes code duplication is Bad. i know.
+                            this.stableCSMParameters.enabled = false;
+                            this.LiSPSMParameters.enabled = false;
+                            this.CSMParameters.textureResolution = this.CSMTestParameters[this.testIdx].textureResolution;
+                            this.CSMParameters.splitCount = this.CSMTestParameters[this.testIdx].splitCount;
+                            this.CSMParameters.splitLambda = this.CSMTestParameters[this.testIdx].splitLambda;
+                            let pos = this.CSMTestParameters[this.testIdx].position;
+                            this.camera.position.set(pos.x, pos.y, pos.z);
+                            let rot = this.CSMTestParameters[this.testIdx].rotation;
+                            this.camera.rotation.set(rot.x, rot.y, rot.z);
+                            this.testIdx++;
+                        }
+                        break;
+                    case "StableCSM":
+                        if (this.testIdx === this.stableCSMTestParameters.length) {
+                            this.currentAlgorithm = "LiSPSM";
+                            this.testIdx = 0;
+                        } else {
+                            this.stableCSMParameters.enabled = true;
+                            this.LiSPSMParameters.enabled = false;
+                            this.CSMParameters.textureResolution = this.stableCSMTestParameters[this.testIdx].textureResolution;
+                            this.CSMParameters.splitCount = this.stableCSMTestParameters[this.testIdx].splitCount;
+                            this.CSMParameters.splitLambda = this.stableCSMTestParameters[this.testIdx].splitLambda;
+                            this.stableCSMParameters.firstTextureSize = this.stableCSMTestParameters[this.testIdx].firstTextureSize;
+                            this.stableCSMParameters.projectedAreaSide = this.stableCSMTestParameters[this.testIdx].projectedAreaSide;
+                            let pos = this.stableCSMTestParameters[this.testIdx].position;
+                            this.camera.position.set(pos.x, pos.y, pos.z);
+                            let rot = this.stableCSMTestParameters[this.testIdx].rotation;
+                            this.camera.rotation.set(rot.x, rot.y, rot.z);
+                            this.testIdx++;
+                        }
+                        break;
+                    case "LiSPSM":
+                        if (this.testIdx === this.LiSPSMTestParameters.length) {
+                            this.currentAlgorithm = undefined;
+                            this.testIdx = undefined;
+                            saveText(JSON.stringify(this.testResults), `res.json`);
+                            this.testResults = [];
+                        } else {
+                            this.stableCSMParameters.enabled = false;
+                            this.LiSPSMParameters.enabled = true;
+                            this.CSMParameters.splitCount = 1;
+                            this.CSMParameters.textureResolution = this.LiSPSMTestParameters[this.testIdx].textureResolution;
+                            let pos = this.LiSPSMTestParameters[this.testIdx].position;
+                            this.camera.position.set(pos.x, pos.y, pos.z);
+                            let rot = this.LiSPSMTestParameters[this.testIdx].rotation;
+                            this.camera.rotation.set(rot.x, rot.y, rot.z);
+                            this.testIdx++;
+                        }
+                        break;
+                }
+            }
+
             this.resizeTextures();
             this.updateMaterialUniformsFromParameters();
 
@@ -405,6 +453,8 @@ class ViewArea extends Component {
                 this.createSplitCameras();
                 this.createTextureMatrices();
 
+                this.stableCSMParameters.enabled = false;
+
                 for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
                     if (this.LiSPSMParameters.enabled) {
                         this.splitCameras[i].projectionMatrix.premultiply(lispsmMatrix);
@@ -419,26 +469,52 @@ class ViewArea extends Component {
                 let color = this.scene.background;
                 renderer.setRenderTarget(debugTarget);
                 renderer.render(this.scene, this.camera);
-                let pixels = new Float32Array(4 * debugTarget.width * debugTarget.height);
-                renderer.readRenderTargetPixels(debugTarget, 0, 0, debugTarget.width, debugTarget.height, pixels);
+                let pxs = new Float32Array(4 * debugTarget.width * debugTarget.height);
+                renderer.readRenderTargetPixels(debugTarget, 0, 0, debugTarget.width, debugTarget.height, pxs);
                 let sum = 0;
                 let cnt = 0;
-                for (let i = 0; i < pixels.length; i += 4) {
-                    if (compareFloatsWithEpsilon(pixels[i], color.r, eps) &&
-                        compareFloatsWithEpsilon(pixels[i + 1], color.g, eps) &&
-                        compareFloatsWithEpsilon(pixels[i + 2], color.b, eps)) {
+                let vals = [];
+                for (let i = 0; i < pxs.length; i += 4) {
+                    if (!compareFloatsWithEpsilon(pxs[i + 3], 0.42, eps)) {
                         continue;
                     }
-                    sum += pixels[i];
+                    sum += pxs[i];
                     cnt++;
+                    vals.push(pxs[i]);
                 }
-                this.testResults.push({
-                    resolution: this.CSMParameters.textureResolution,
-                    splitCount: this.CSMParameters.splitCount,
-                    splitLambda: this.CSMParameters.splitLambda,
-                    projectedAreaSide: this.stableCSMParameters.projectedAreaSide,
-                    avg: sum / cnt});
-                console.log(sum / cnt);
+                if (this.stableCSMParameters.enabled) {
+                    this.testResults.push({
+                        type: "stableCSM",
+                        resolution: this.CSMParameters.textureResolution,
+                        splitCount: this.CSMParameters.splitCount,
+                        splitLambda: this.CSMParameters.splitLambda,
+                        projectedAreaSide: this.stableCSMParameters.projectedAreaSide,
+                        firstTextureSize: this.stableCSMParameters.firstTextureSize,
+                        avg: sum / cnt});
+
+                } else if (this.LiSPSMParameters.enabled) {
+                    this.testResults.push({
+                        type: "LiSPSM",
+                        resolution: this.CSMParameters.textureResolution,
+                        avg: sum / cnt
+                    });
+                } else if (this.CSMParameters.splitCount > 1) {
+                    this.testResults.push({
+                        type: "CSM",
+                        resolution: this.CSMParameters.textureResolution,
+                        splitCount: this.CSMParameters.splitCount,
+                        splitLambda: this.CSMParameters.splitLambda,
+                        avg: sum / cnt
+                    });
+                } else if (this.CSMParameters.splitCount === 1) {
+                    this.testResults.push({
+                        type: "USM",
+                        resolution: this.CSMParameters.textureResolution,
+                        avg: sum / cnt
+                    });
+                }
+
+                console.log(sum / cnt, JSON.stringify(this.camera.position), JSON.stringify(this.camera.rotation));
             }
 
             renderer.setRenderTarget(null);
@@ -761,32 +837,85 @@ class ViewArea extends Component {
         currentAttribute: null
     }
 
-    setupPrecisionTest(parameter, range) {
-        this.camera.position.set(0, 3000, 0);
-        this.camera.rotation.set(-Math.PI / 2, 0, 0);
-        this.CSMParameters.displayPixelAreas = true;
-        this.precisionTestParameters[parameter] = range;
-        this.precisionTestParameters[`${parameter}Index`] = 0;
-        this.precisionTestParameters.running = true;
-        this.precisionTestParameters.currentAttribute = parameter;
-        this.testResults = [];
-        console.log("running precision test for ", parameter);
-    };
+    generateParameters() {
+        const resolutions = [512, 768, 1024, 1536, 2048];
+        const positions = [
+            new THREE.Vector3(1000, 1000, 800),
+            new THREE.Vector3(11.15, 1600.56, 279.46),
+            new THREE.Vector3(-10, 91.3, -1622.2)
+        ];
+        const rotations = [
+            new THREE.Euler(-0.896, 0.663, 0.656),
+            new THREE.Euler(-1.398, 0.007, 0.039),
+            new THREE.Euler(-3.085 , 0.006, -3.141)
+        ];
+        const splits = [3, 4, 5, 7, 10];
+        const splitLambdas = [0, 0.25, 0.5, 0.75, 1];
+        const projectedAreaSides = [8000, 10000, 12500, 15000, 17500, 20000, 25000, 30000];
+        const firstTextureSizeProportions = [1 / 16, 1 / 8, 1 / 4, 1 / 2];
 
-    runPrecisionTest(parameter) {
-        if (this.CSMParameters[parameter] !== undefined) {
-            this.CSMParameters[parameter] = this.precisionTestParameters[parameter][this.precisionTestParameters[`${parameter}Index`]++];
-        } else if (this.stableCSMParameters[parameter] !== undefined) {
-            this.stableCSMParameters[parameter] = this.precisionTestParameters[parameter][this.precisionTestParameters[`${parameter}Index`]++];
+        this.USMTestParameters = [];
+        this.CSMTestParameters = [];
+        this.stableCSMTestParameters = [];
+        this.LiSPSMTestParameters = [];
+
+        // USM parameters
+        for (let res of resolutions) {
+            for (let i = 0; i < positions.length; i++) {
+                this.USMTestParameters.push({
+                    textureResolution: res,
+                    position: positions[i],
+                    rotation: rotations[i]
+                });
+            }
         }
-        if (this.precisionTestParameters[`${parameter}Index`] === this.precisionTestParameters[parameter].length) {
-            this.precisionTestParameters.running = false;
-            this.precisionTestParameters[[`${parameter}Index`]] = 0;
-            this.precisionTestParameters.currentAttribute = null;
-            console.log(`precision test for ${parameter} finished`);
-            saveText(JSON.stringify(this.testResults), `${parameter}.json`);
-            this.testResults = [];
+
+        // CSM parameters
+        for (let res of resolutions) {
+            for (let split of splits) {
+                for (let lambda of splitLambdas) {
+                    for (let i = 0; i < positions.length; i++) {
+                        this.CSMTestParameters.push({
+                            textureResolution: res,
+                            position: positions[i],
+                            rotation: rotations[i],
+                            splitCount: split,
+                            splitLambda: lambda
+                        });
+                    }
+                }
+            }
         }
+
+        // stable CSM parameters
+        for (let res of resolutions) {
+            for (let split of splits) {
+                for (let lambda of splitLambdas) {
+                    for (let side of projectedAreaSides) {
+                        for (let prop of firstTextureSizeProportions) {
+                            for (let i = 0; i < positions.length; i++) {
+                                this.stableCSMTestParameters.push({
+                                    textureResolution: res,
+                                    position: positions[i],
+                                    rotation: rotations[i],
+                                    splitCount: split,
+                                    splitLambda: lambda,
+                                    projectedAreaSide: side,
+                                    firstTextureSize: prop * side
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // LiSPSM parameters are so far exactly the same. test LiSPSM + CSM later
+        this.LiSPSMTestParameters = this.USMTestParameters;
+
+        this.testIdx = 0;
+        this.currentAlgorithm = 'USM';
+
     }
 }
 
