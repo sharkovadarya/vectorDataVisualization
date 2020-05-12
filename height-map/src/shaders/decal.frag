@@ -1,15 +1,14 @@
 const int MAX_VERTICES = 3;
 
 uniform sampler2D depthTexture;
-uniform float width;
-uniform float height;
+uniform float W;
+uniform float H;
 
 uniform vec2 vertices[MAX_VERTICES];
 
 uniform mat4 projectionMatrixInverse;
 uniform mat4 viewMatrixInverse;
 
-varying vec2 vUv;
 
 float sign(vec2 p1, vec2 p2, vec2 p3)
 {
@@ -32,8 +31,7 @@ bool pointInTriangle(vec2 pt, vec2 v1, vec2 v2, vec2 v3)
 }
 
 void main() {
-//    vec2 screenPos = vec2((gl_FragCoord.x) / width, (gl_FragCoord.y) / height);
-    vec2 screenPos = vUv;
+    vec2 screenPos = vec2((gl_FragCoord.x) / W, (gl_FragCoord.y) / H);
     float pixelDepth = texture2D(depthTexture, screenPos).x;
 
     vec4 clipSpacePosition = vec4(screenPos * 2.0 - vec2(1.0), 2.0 * pixelDepth - 1.0, 1.0);
@@ -42,11 +40,18 @@ void main() {
     pos4 /= pos4.w;
     vec3 worldSpacePos = (viewMatrixInverse * pos4).xyz;
 
-//    gl_FragColor = vec4(worldSpacePos.x, 1, worldSpacePos.z, 1);
-
-    if (pointInTriangle(vec2(worldSpacePos.x, worldSpacePos.z), vertices[0], vertices[1], vertices[2])) {
+    // keep for a simple square
+    if (worldSpacePos.x >= -200.0 && worldSpacePos.x <= 200.0 && worldSpacePos.z <= 200.0 && worldSpacePos.z >= -200.0) {
         gl_FragColor = vec4(0, 1, 0, 1);
     } else {
         gl_FragColor = vec4(0, 0, 0, 0);
     }
+
+    // uncomment for triangle
+    /*if (pointInTriangle(vec2(worldSpacePos.x, worldSpacePos.z), vertices[0], vertices[1], vertices[2])) {
+        gl_FragColor = vec4(0, 1, 0, 1);
+    } else {
+        gl_FragColor = vec4(0, 0, 0, 0);
+    }*/
+
 }

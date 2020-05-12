@@ -79,8 +79,24 @@ class ViewArea extends Component {
 
         this.decalParameters = {
             enabled: false,
-            decalMesh: null // one temporary mesh
-        }
+            decalScene: new THREE.Scene(),
+            decalMaterial: new THREE.ShaderMaterial({
+                vertexShader: decalVxShader,
+                fragmentShader: decalFragShader,
+                transparent: true,
+                uniforms: {
+                    depthTexture: {value: null},
+                    bumpScale: {value: this.constants.terrainBumpScale},
+                    heightMap: {value: this.heightMap},
+                    vertices: {value: new Array(3).fill(new THREE.Vector2())},
+                    W: {value: window.innerWidth},
+                    H: {value: window.innerHeight},
+                    projectionMatrixInverse: {value: new THREE.Matrix4()},
+                    viewMatrixInverse: {value: new THREE.Matrix4()}
+                }
+            }),
+            decals: []
+        };
 
         this.canvasRef = React.createRef();
         this.divRef = React.createRef();
@@ -101,7 +117,7 @@ class ViewArea extends Component {
 
         this.createLights();
 
-        this.shaderMaterial = new THREE.ShaderMaterial({uniforms: {transparent: true}, vertexShader: vxShader, fragmentShader: fragShader});
+        this.shaderMaterial = new THREE.ShaderMaterial({uniforms: {transparent: true}, vertexShader: vxShader, fragmentShader: fragShader, depthTest: true, depthWrite: true});
         this.terrain = this.createMeshes();
 
         this.debugScene = new THREE.Scene();
@@ -145,6 +161,18 @@ class ViewArea extends Component {
                 this.scene.add(new THREE.CameraHelper(this.splitCameras[i].clone()));
             }
         };
+
+        const addDecal = () => {
+            this.addDecal([
+                new THREE.Vector2(-200, 200),
+                new THREE.Vector2(200, 100),
+                new THREE.Vector2(-50, -50)
+            ]);
+        }
+
+        const createDecalScene = () => {
+            this.decalParameters.decalScene.copy(this.scene, true);
+        }
 
         const runPrecisionTest = () => {
             this.generateParameters();
@@ -317,6 +345,9 @@ class ViewArea extends Component {
             let decalsEnabled = gui.add(parameters, 'decalsEnabled');
             decalsEnabled.onFinishChange((value) => {
                 updateParametersValue('decalParameters', 'enabled', value);
+                createDecalScene();
+                // TODO temporary measure
+                addDecal();
             })
         };
     }
@@ -345,7 +376,7 @@ class ViewArea extends Component {
         document.body.appendChild(stats.domElement);
 
         let debugTarget = new THREE.WebGLRenderTarget(canvas.width, canvas.height, {type: THREE.FloatType});
-        let depthTarget = new THREE.WebGLRenderTarget(canvas.width, canvas.height, {depthTexture: new THREE.DepthTexture(canvas.width, canvas.height)})
+        let depthTarget = new THREE.WebGLRenderTarget(canvas.width, canvas.height, {depthBuffer: true, depthTexture: new THREE.DepthTexture(canvas.width, canvas.height)});
 
         let lispsmMatrix = new THREE.Matrix4().fromArray([
             1, 0, 0, 0,
@@ -361,7 +392,7 @@ class ViewArea extends Component {
             const deltaTime = now - then;
             then = now;
 
-            if (this.testIdx !== undefined) {
+            /*if (this.testIdx !== undefined) {
                 switch (this.currentAlgorithm) {
                     case "USM":
                         if (this.testIdx === this.USMTestParameters.length) {
@@ -435,7 +466,7 @@ class ViewArea extends Component {
                         }
                         break;
                 }
-            }
+            }*/
 
             // this.resizeTextures();
             // this.updateMaterialUniformsFromParameters();
@@ -542,29 +573,39 @@ class ViewArea extends Component {
             if (this.decalParameters.enabled) {
                 renderer.setRenderTarget(depthTarget);
                 renderer.render(this.scene, this.camera);
-                this.drawDecal(depthTarget.depthTexture.clone(), [
-                    new THREE.Vector2(-200, 200),
-                    new THREE.Vector2(200, 100),
-                    new THREE.Vector2(-50, -50)
-                ], canvas);
+
+/*
+                this.postMaterial.uniforms.tDiffuse.value = depthTarget.texture;
+                this.postMaterial.uniforms.tDepth.value = depthTarget.depthTexture;*/
+
+                this.drawDecals(depthTarget.depthTexture, canvas);
+
 
                 /*renderer.setRenderTarget(debugTarget);
-                renderer.render(this.scene, this.camera);
+                renderer.render(this.decalParameters.decalScene, this.camera);
                 let pixels1 = new Float32Array(4 * canvas.width * canvas.height);
                 renderer.readRenderTargetPixels(debugTarget, 0, 0, canvas.width, canvas.height, pixels1);
-                let pp = pixels1.filter((it, idx) => { return idx % 4 === 1; })
                 for (let i = 0; i < pixels1.length; i += 4) {
-                    if (compareFloatsWithEpsilon(pixels1[i + 1], 0.5, eps) && compareFloatsWithEpsilon(pixels1[i + 2], 0.0, eps)) {
+                    if (compareFloatsWithEpsilon(pixels1[i + 2], 0.0, eps)) {
                         let p0 = pixels1[i];
+                        let p1 = pixels1[i + 1];
                         let p2 = pixels1[i + 2];
-                        console.log(p0, p2);
+                        let p3 = pixels1[i + 3];
+                        console.log(p0, p1, p2, p3);
                     }
-                }*/
+                }
+                console.log("stop");*/
+
+                renderer.setRenderTarget(null);
+                renderer.render(this.decalParameters.decalScene, this.camera);
+
+
+            } else {
+
+                renderer.setRenderTarget(null);
+                renderer.render(this.scene, this.camera);
+
             }
-
-            renderer.setRenderTarget(null);
-            renderer.render(this.scene, this.camera);
-
 
             if (this.CSMParameters.displayTextures) {
                 this.debugScene.add(this.camera);
@@ -849,32 +890,25 @@ class ViewArea extends Component {
     }
 
 
-    drawDecal(depthTexture, vertices, canvas) {
-        let boxGeometry = new THREE.BoxBufferGeometry(500, 500, 500);
-        if (this.decalParameters.decalMesh === null) {
-            let boxMaterial = new THREE.ShaderMaterial({
-                vertexShader: decalVxShader,
-                fragmentShader: decalFragShader,
-                uniforms: {
-                    depthTexture: {type: "t", value: depthTexture},
-                    vertices: {type: "v2v", value: vertices},
-                    heightMap: {type: "t", value: this.heightMap},
-                    bumpScale: {type: "f", value: this.constants.terrainBumpScale},
-                    projectionMatrixInverse: {type: "m4", value: this.camera.projectionMatrixInverse},
-                    viewMatrixInverse: {type: "m4", value: this.camera.matrixWorld}, // if matrixWorldInverse is viewMatrix then surely viewMatrixInverse would be matrixWorld, no?
-                    height: {type: "f", value: canvas.height},
-                    width: {type: "f", value: canvas.width}
-                },
-                transparent: true
-            });
-            let decalMesh = new THREE.Mesh(boxGeometry, boxMaterial);
-            this.scene.add(decalMesh);
-        } else {
-            this.decalParameters.decalMesh.material.uniforms.depthTexture.value = depthTexture;
-            this.decalParameters.decalMesh.material.uniforms.projectionMatrixInverse.value = this.camera.projectionMatrixInverse;
-            this.decalParameters.decalMesh.material.uniforms.viewMatrixInverse.value = this.camera.matrixWorld;
+    drawDecals(depthTexture, canvas) {
+        for (let mesh of this.decalParameters.decals) {
+            mesh.material.uniforms.depthTexture.value = depthTexture;
+            mesh.material.uniforms.W.value = canvas.width;
+            mesh.material.uniforms.H.value = canvas.height;
+            mesh.material.uniforms.projectionMatrixInverse.value = this.camera.projectionMatrixInverse;
+            mesh.material.uniforms.viewMatrixInverse.value = this.camera.matrixWorld;
         }
 
+    }
+
+    addDecal(vertices) {
+        let geom = new THREE.BoxBufferGeometry(700, 700, 700);
+        let material = this.decalParameters.decalMaterial.clone();
+        material.uniforms.vertices.value = vertices;
+        let mesh = new THREE.Mesh(geom, material);
+        // TODO position
+        this.decalParameters.decalScene.add(mesh);
+        this.decalParameters.decals.push(mesh);
     }
 
 
