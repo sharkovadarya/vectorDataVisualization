@@ -1,3 +1,5 @@
+precision highp float;
+
 const int MAX_VERTICES = 3;
 
 uniform sampler2D depthTexture;
@@ -40,12 +42,21 @@ void main() {
     pos4 /= pos4.w;
     vec3 worldSpacePos = (viewMatrixInverse * pos4).xyz;
 
+    if (worldSpacePos.x < 0.0 || worldSpacePos.z < 0.0) {
+        gl_FragColor = vec4(0, 1, 0, 1);
+        return;
+    }
+
+    worldSpacePos /= 1000.0;
+
+    gl_FragColor = vec4(worldSpacePos, 1);
+
     // keep for a simple square
-    if (worldSpacePos.x >= -200.0 && worldSpacePos.x <= 200.0 && worldSpacePos.z <= 200.0 && worldSpacePos.z >= -200.0) {
+    /*if (worldSpacePos.x >= -200.0 && worldSpacePos.x <= 200.0 && worldSpacePos.z <= 200.0 && worldSpacePos.z >= -200.0) {
         gl_FragColor = vec4(0, 1, 0, 1);
     } else {
         gl_FragColor = vec4(0, 0, 0, 0);
-    }
+    }*/
 
     // uncomment for triangle
     /*if (pointInTriangle(vec2(worldSpacePos.x, worldSpacePos.z), vertices[0], vertices[1], vertices[2])) {
