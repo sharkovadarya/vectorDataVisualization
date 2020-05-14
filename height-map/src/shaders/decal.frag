@@ -1,15 +1,27 @@
 precision highp float;
 
-const int MAX_VERTICES = 3;
 
 uniform sampler2D depthTexture;
 uniform float W;
 uniform float H;
 
-uniform vec2 vertices[MAX_VERTICES];
+uniform vec2 triangleVertices[3];
+
+uniform vec2 quadVertices[4];
+uniform sampler2D quadTexture;
+
+uniform vec2 circleCenter;
+uniform float circleRadius;
+
+uniform vec4 color;
+
+uniform int mode; // 0 -> triangle, 1 -> colored quad, 2 -> patterned quad, 3 -> circle
 
 uniform mat4 projectionMatrixInverse;
 uniform mat4 viewMatrixInverse;
+
+varying vec3 pp;
+varying vec2 vUv;
 
 
 float sign(vec2 p1, vec2 p2, vec2 p3)
@@ -42,27 +54,19 @@ void main() {
     pos4 /= pos4.w;
     vec3 worldSpacePos = (viewMatrixInverse * pos4).xyz;
 
-    if (worldSpacePos.x < 0.0 || worldSpacePos.z < 0.0) {
-        gl_FragColor = vec4(0, 1, 0, 1);
-        return;
+    bool drawPoint = false;
+    if (mode == 0) {
+        drawPoint = pointInTriangle(vec2(worldSpacePos.x, worldSpacePos.z), triangleVertices[0], triangleVertices[1], triangleVertices[2]);
+    } else if (mode == 1 || mode == 2) {
+        drawPoint = pointInTriangle(vec2(worldSpacePos.x, worldSpacePos.z), quadVertices[0], quadVertices[1], quadVertices[2]) ||
+                    pointInTriangle(vec2(worldSpacePos.x, worldSpacePos.z), quadVertices[0], quadVertices[3], quadVertices[2]);
+    } else if (mode == 3) {
+        drawPoint = (worldSpacePos.x - circleCenter.x) * (worldSpacePos.x - circleCenter.x) + (worldSpacePos.z - circleCenter.y) * (worldSpacePos.z - circleCenter.y) <= circleRadius * circleRadius;
     }
 
-    worldSpacePos /= 1000.0;
-
-    gl_FragColor = vec4(worldSpacePos, 1);
-
-    // keep for a simple square
-    /*if (worldSpacePos.x >= -200.0 && worldSpacePos.x <= 200.0 && worldSpacePos.z <= 200.0 && worldSpacePos.z >= -200.0) {
-        gl_FragColor = vec4(0, 1, 0, 1);
+    if (drawPoint) {
+        gl_FragColor = color;
     } else {
         gl_FragColor = vec4(0, 0, 0, 0);
-    }*/
-
-    // uncomment for triangle
-    /*if (pointInTriangle(vec2(worldSpacePos.x, worldSpacePos.z), vertices[0], vertices[1], vertices[2])) {
-        gl_FragColor = vec4(0, 1, 0, 1);
-    } else {
-        gl_FragColor = vec4(0, 0, 0, 0);
-    }*/
-
+    }
 }

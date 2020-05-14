@@ -31,7 +31,6 @@ import {
     getStableOrthographicCameraForPerspectiveCamera
 } from "./CSMFrustumSplit";
 import {loadSVGToScene} from "./SVGLoader";
-import {DecalGeometry} from "three/examples/jsm/geometries/DecalGeometry";
 
 // import {log} from 'log';
 
@@ -88,12 +87,19 @@ class ViewArea extends Component {
                     depthTexture: {value: null},
                     bumpScale: {value: this.constants.terrainBumpScale},
                     heightMap: {value: this.heightMap},
-                    vertices: {value: new Array(3).fill(new THREE.Vector2())},
+                    mode: {value: 0},
+                    triangleVertices: {value: new Array(3).fill(new THREE.Vector2())},
+                    quadVertices: {value: new Array(4).fill(new THREE.Vector2())},
+                    quadTexture: {value: null},
+                    circleCenter: {value: new THREE.Vector2()},
+                    circleRadius: {value: 0},
                     W: {value: window.innerWidth},
                     H: {value: window.innerHeight},
                     projectionMatrixInverse: {value: new THREE.Matrix4()},
-                    viewMatrixInverse: {value: new THREE.Matrix4()}
-                }
+                    viewMatrixInverse: {value: new THREE.Matrix4()},
+                    color: {value: new THREE.Vector4()}
+                },
+                depthWrite: false
             }),
             decals: []
         };
@@ -163,15 +169,50 @@ class ViewArea extends Component {
         };
 
         const addDecal = () => {
-            this.addDecal([
-                new THREE.Vector2(-200, 200),
-                new THREE.Vector2(200, 100),
-                new THREE.Vector2(-50, -50)
-            ]);
+            let center = new THREE.Vector2(getRandomInt(-2000, 2000), getRandomInt(-2000, 2000));
+            // let center = new THREE.Vector2(0, 0);
+            let mode = getRandomInt(0, 3);
+            // let mode = 2;
+            switch (mode) {
+                case 0:
+                    this.addDecal(center, [
+                        center.clone().add(new THREE.Vector2(50, 100)),
+                        center.clone().add(new THREE.Vector2(100, -150)),
+                        center.clone().add(new THREE.Vector2(-150, -50))
+                    ]);
+                    break;
+                case 1:
+                case 2:
+                    let side = getRandomInt(50, 300);
+                    // let side = 500;
+                    let vertices = [
+                        center.clone().add(new THREE.Vector2(side / 2, side / 2)),
+                        center.clone().add(new THREE.Vector2(-side / 2, side / 2)),
+                        center.clone().add(new THREE.Vector2(-side / 2, -side / 2)),
+                        center.clone().add(new THREE.Vector2(side / 2, - side / 2))
+                    ];
+                    if (mode === 2) {
+                        this.addDecal(center, vertices, -1, this.decalTexture);
+                    } else {
+                        this.addDecal(center, vertices);
+                    }
+                    break;
+                case 3:
+                    let radius = getRandomInt(50, 300);
+                    this.addDecal(center, null, radius);
+                    break;
+            }
         }
 
-        const createDecalScene = () => {
+        const setDecalSettings = () => {
             this.decalParameters.decalScene.copy(this.scene, true);
+            this.camera.near = 30;
+            this.camera.updateProjectionMatrix();
+        }
+
+        const resetDecalSettings = () => {
+            this.camera.near = 0.1;
+            this.camera.updateProjectionMatrix();
         }
 
         const runPrecisionTest = () => {
@@ -180,7 +221,7 @@ class ViewArea extends Component {
         }
 
         const DataDisplayParameters = function () {
-            this.CSMEnabled = false;
+            this.CSMEnabled = true;
 
             this.splitCount = 4;
             this.splitType = "linear";
@@ -191,7 +232,7 @@ class ViewArea extends Component {
 
             this.textureResolution = 512;
 
-            this.stable = false;
+            this.stable = true;
             this.firstTextureSize = 50;
             this.projectedAreaSide = 5000;
 
@@ -209,6 +250,10 @@ class ViewArea extends Component {
             this.addFrustum = function() {
                 addFrustum();
             };
+
+            this.addDecal = () => {
+                addDecal();
+            }
 
             this.runPerformanceTest = function() {
                 $.getJSON("src/json/camera.json", function(json) {
@@ -230,8 +275,6 @@ class ViewArea extends Component {
         this.testResults = [];
         this.dynamicData = true;
 
-        // TODO remove this later
-        let refs = this;
         let updateParametersValue = (parametersGroup, parameterName, value) => {
             this[parametersGroup][parameterName] = value;
         };
@@ -257,6 +300,12 @@ class ViewArea extends Component {
                 this.CSMParameters.passesFactor = passesFactor;
             }
         }
+
+        window.onclick = (mouse) => {
+            const vector = new THREE.Vector3(mouse.x, mouse.y, -1).unproject(this.camera);
+            console.log(mouse.x, mouse.y, vector);
+        };
+
         window.onload = function() {
             let parameters = new DataDisplayParameters();
             let gui = new dat.GUI();
@@ -345,10 +394,13 @@ class ViewArea extends Component {
             let decalsEnabled = gui.add(parameters, 'decalsEnabled');
             decalsEnabled.onFinishChange((value) => {
                 updateParametersValue('decalParameters', 'enabled', value);
-                createDecalScene();
-                // TODO temporary measure
-                addDecal();
-            })
+                if (value) {
+                    setDecalSettings();
+                } else {
+                    resetDecalSettings();
+                }
+            });
+            gui.add(parameters, 'addDecal');
         };
     }
 
@@ -364,6 +416,10 @@ class ViewArea extends Component {
         this.controls = this.createControls(canvas, this.camera);
 
         this.createDebugMeshes();
+
+        let tl = new THREE.TextureLoader();
+        this.decalTexture = tl.load('src/textures/decal.png');
+        this.decalTexture.wrapS = this.decalTexture.wrapT = THREE.RepeatWrapping;
 
 
         const renderer = this.createRenderer(canvas);
@@ -392,7 +448,7 @@ class ViewArea extends Component {
             const deltaTime = now - then;
             then = now;
 
-            /*if (this.testIdx !== undefined) {
+            if (this.testIdx !== undefined) {
                 switch (this.currentAlgorithm) {
                     case "USM":
                         if (this.testIdx === this.USMTestParameters.length) {
@@ -466,10 +522,10 @@ class ViewArea extends Component {
                         }
                         break;
                 }
-            }*/
+            }
 
-            // this.resizeTextures();
-            // this.updateMaterialUniformsFromParameters();
+            this.resizeTextures();
+            this.updateMaterialUniformsFromParameters();
 
             if (this.dynamicData && this.objects !== undefined) {
                 for (let i = 0; i < this.objects.length; i++) {
@@ -574,30 +630,28 @@ class ViewArea extends Component {
                 renderer.setRenderTarget(depthTarget);
                 renderer.render(this.scene, this.camera);
 
-/*
-                this.postMaterial.uniforms.tDiffuse.value = depthTarget.texture;
-                this.postMaterial.uniforms.tDepth.value = depthTarget.depthTexture;*/
-
                 this.drawDecals(depthTarget.depthTexture, canvas);
 
 
-                /*renderer.setRenderTarget(debugTarget);
-                renderer.render(this.decalParameters.decalScene, this.camera);
-                let pixels1 = new Float32Array(4 * canvas.width * canvas.height);
-                renderer.readRenderTargetPixels(debugTarget, 0, 0, canvas.width, canvas.height, pixels1);
-                for (let i = 0; i < pixels1.length; i += 4) {
-                    if (compareFloatsWithEpsilon(pixels1[i + 2], 0.0, eps)) {
-                        let p0 = pixels1[i];
-                        let p1 = pixels1[i + 1];
-                        let p2 = pixels1[i + 2];
-                        let p3 = pixels1[i + 3];
-                        console.log(p0, p1, p2, p3);
+                /*if (this.decalParameters.decals.length > 0) {
+                    renderer.setRenderTarget(debugTarget);
+                    renderer.render(this.decalParameters.decalScene, this.camera);
+                    let pixels1 = new Float32Array(4);
+                    renderer.readRenderTargetPixels(debugTarget, canvas.width / 2, canvas.height / 2, 1, 1, pixels1);
+                    for (let i = 0; i < pixels1.length; i += 4) {
+                        /!*if (pixels1[i + 1] === 0) {
+                            console.log(pixels1[i], pixels1[i + 1], pixels1[i + 2]);
+                        }*!/
+                        console.log(pixels1[i], pixels1[i + 1], pixels1[i + 2]);
                     }
-                }
-                console.log("stop");*/
+                    console.log("stop");
+                }*/
+
 
                 renderer.setRenderTarget(null);
+                renderer.sortObjects = false;
                 renderer.render(this.decalParameters.decalScene, this.camera);
+                renderer.sortObjects = true;
 
 
             } else {
@@ -641,7 +695,7 @@ class ViewArea extends Component {
     createCamera(canvas, positionX, positionY, positionZ) {
         const fov = 45;
         const aspect = canvas.width / canvas.height;
-        const near = 1;
+        const near = 0.1;
         const far = 10000;
 
         let camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
@@ -784,7 +838,7 @@ class ViewArea extends Component {
             });
         }
         this.loadBufferTexture();
-        //this.generateBufferTextureObjects(2000);
+        // this.generateBufferTextureObjects(2000);
     }
 
     loadBufferTexture() {
@@ -792,12 +846,6 @@ class ViewArea extends Component {
     }
 
     generateBufferTextureObjects(objCount, minSize = 50, maxSize = 300) {
-        function getRandomInt(min, max) {
-            min = Math.ceil(min);
-            max = Math.floor(max);
-            return Math.floor(Math.random() * (max - min + 1)) + min;
-        }
-
         this.objects = []; // change in runtime if necessary
         this.directions = [];
         for (let i = 0; i < objCount; i++) {
@@ -901,12 +949,32 @@ class ViewArea extends Component {
 
     }
 
-    addDecal(vertices) {
-        let geom = new THREE.BoxBufferGeometry(700, 700, 700);
+    addDecal(center, vertices, circleRadius, pattern) {
+        let geom = new THREE.BoxBufferGeometry(500, 500, 500);
         let material = this.decalParameters.decalMaterial.clone();
-        material.uniforms.vertices.value = vertices;
+
+        if (vertices === null) {
+            if (circleRadius !== undefined) {
+                material.uniforms.mode.value = 3;
+                material.uniforms.circleCenter.value = center;
+                material.uniforms.circleRadius.value = circleRadius;
+            }
+        } else if (vertices.length === 3) {
+            material.uniforms.mode.value = 0;
+            material.uniforms.triangleVertices.value = vertices;
+        } else if (vertices.length === 4) {
+            material.uniforms.mode.value = 1;
+            material.uniforms.quadVertices.value = vertices;
+        }
+
+        if (pattern !== undefined) {
+            material.uniforms.quadTexture.value = pattern;
+        } else {
+            material.uniforms.color.value = new THREE.Vector4(Math.random(), Math.random(), Math.random(), 1);
+        }
+
         let mesh = new THREE.Mesh(geom, material);
-        // TODO position
+        mesh.position.set(center.x, 0, center.y);
         this.decalParameters.decalScene.add(mesh);
         this.decalParameters.decals.push(mesh);
     }
@@ -1081,5 +1149,12 @@ function saveText(text, filename){
     a.setAttribute('download', filename);
     a.click()
 }
+
+function getRandomInt(min, max) {
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 
 
