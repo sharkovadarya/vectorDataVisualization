@@ -147,14 +147,25 @@ void main() {
   vec4 color = vec4(-1.0, 0.0, 0.0, 0.0);
 
   if (enableCSM == 1) {
-    for (int i = 0; i < MAX_SPLITS; ++i) {
-      if (i >= splitCount) {
-        break;
-      }
-      vec3 projected_c = projected_texcoords[i].xyz / projected_texcoords[i].w;
-
-      if (displayPixelAreas == 1) {
+    if (displayPixelAreas == 1) {
+      for (int i = splitCount; i >= 0; --i) {
+        vec3 projected_c = projected_texcoords[i].xyz / projected_texcoords[i].w;
         vec2 c = enableLiSPSM == 1 ? projected_c.xz : projected_c.xy;
+        /*if (inRange(c)) {
+          if (i == 0) {
+            color = vec4(1, 0, 0, 1);
+          } else if (i == 1) {
+            color = vec4(0, 1, 0, 1);
+          } else if (i == 2) {
+            color = vec4(0, 0, 1, 1);
+          } else if (i == 3) {
+            color = vec4(1, 0, 1, 1);
+          } else if (i == 4) {
+            color = vec4(0, 1, 1, 1);
+          } else {
+            color = vec4(1, 1, 0, 1);
+          }
+        }*/
         if (inRange(c)) {
           vec4 dx = dFdx(posWS);
           vec4 dy = dFdy(posWS);
@@ -177,15 +188,30 @@ void main() {
             r = calculateQuadrangleArea(p1.xy, p2.xy, p3.xy, p4.xy) * resolution * resolution;
           }
           color = vec4(r, r, r, 0.42);
-        }
+      }
+    }
+    } else {
+
+    }
+
+    for (int i = 0; i < MAX_SPLITS; ++i) {
+      if (i >= splitCount) {
+        break;
+      }
+      vec3 projected_c = projected_texcoords[i].xyz / projected_texcoords[i].w;
+
+      if (displayPixelAreas == 1) {
+
       } else {
         if (get_projected_texture_color(projected_texcoords[i], i, color)) {
 
+          vec2 coord = (enableLiSPSM == 1) ? projected_c.xz : projected_c.xy;
+
           // blending turned off until we figure out lispsm
-          /*if (projected_c.x <= 1.0 && projected_c.x >= 1.0 - cascadesBlendingFactor ||
-          projected_c.y <= 1.0 && projected_c.y >= 1.0 - cascadesBlendingFactor ||
-          projected_c.x >= -1.0 && projected_c.x <= -1.0 + cascadesBlendingFactor ||
-          projected_c.y >= -1.0 && projected_c.y <= -1.0 + cascadesBlendingFactor) {
+          /*if (coord.x <= 1.0 && coord.x >= 1.0 - cascadesBlendingFactor ||
+          coord.y <= 1.0 && coord.y >= 1.0 - cascadesBlendingFactor ||
+          coord.x >= -1.0 && coord.x <= -1.0 + cascadesBlendingFactor ||
+          coord.y >= -1.0 && coord.y <= -1.0 + cascadesBlendingFactor) {
             vec4 next_split_color = vec4(-1.0, 0.0, 0.0, 0.0);
             // this adds image artifacts
             if (i + 1 < splitCount && get_projected_texture_color(projected_texcoords[i + 1], i + 1, next_split_color)) {
