@@ -38,6 +38,8 @@ const mapUrl = 'src/images/map.svg';
 
 const eps = 0.00001;
 
+const objectCount = 1;
+
 class ViewArea extends Component {
     constructor(props) {
         super(props);
@@ -50,13 +52,13 @@ class ViewArea extends Component {
         };
 
         this.CSMParameters = {
-            enabled: false,
+            enabled: true,
             splitCount: 4,
-            splitLambda: 0.0,
+            splitLambda: 0.5,
             maxSplitDistances: [],
             near: 1,
             far: 10000,
-            textureResolution: 512,
+            textureResolution: 1024,
             cascadesBlendingFactor: 0.1,
             passesCount: 5,
             passesFactor: 2,
@@ -67,9 +69,9 @@ class ViewArea extends Component {
         };
 
         this.stableCSMParameters = {
-            enabled: false,
-            firstTextureSize: 50,
-            projectedAreaSide: 5000
+            enabled: true,
+            firstTextureSize: 1200,
+            projectedAreaSide: 12000
         };
 
         this.LiSPSMParameters = {
@@ -169,10 +171,10 @@ class ViewArea extends Component {
         };
 
         const addDecal = () => {
-            let center = new THREE.Vector2(getRandomInt(-2000, 2000), getRandomInt(-2000, 2000));
-            // let center = new THREE.Vector2(0, 0);
-            let mode = getRandomInt(0, 3);
-            // let mode = 2;
+            // let center = new THREE.Vector2(getRandomInt(-2000, 2000), getRandomInt(-2000, 2000));
+            let center = new THREE.Vector2(-400, -400);
+            // let mode = getRandomInt(0, 3);
+            let mode = 0;
             switch (mode) {
                 case 0:
                     this.addDecal(center, [
@@ -220,21 +222,23 @@ class ViewArea extends Component {
             this.CSMParameters.displayPixelAreas = true;
         }
 
+        refs = this;
+
         const DataDisplayParameters = function () {
             this.CSMEnabled = true;
 
             this.splitCount = 4;
-            this.splitType = "linear";
-            this.splitLambda = 0.0;
+            this.splitType = "mixed";
+            this.splitLambda = 0.5;
 
             this.displayBorders = true;
             this.displayTextures = true;
 
-            this.textureResolution = 512;
+            this.textureResolution = 1024;
 
             this.stable = true;
-            this.firstTextureSize = 50;
-            this.projectedAreaSide = 5000;
+            this.firstTextureSize = 1200;
+            this.projectedAreaSide = 12000;
 
             this.cascadesBlendingFactor = 0.1;
 
@@ -252,7 +256,10 @@ class ViewArea extends Component {
             };
 
             this.addDecal = () => {
-                addDecal();
+                // addDecal();
+                for (let i = 0; i < objectCount; i++) {
+                    addDecal();
+                }
             }
 
             this.runPerformanceTest = function() {
@@ -266,14 +273,30 @@ class ViewArea extends Component {
             }
 
             this.debugStop = function() {
+                refs.rolling = true;
+                refs.CSMParameters.displayPixelAreas = true;
+                console.log(refs.camera.position);
+                console.log(refs.camera.rotation);
                 console.log('debugStop');
             }
+
+            this.cameraParallel = function() {
+                refs.camera.position.set(-281.2751217936437, 145.92038086772592, -1593.6095972060978);
+                refs.camera.rotation.set(-3.0502813274673066, -0.17398938616256215, -3.1257427360893026);
+            }
+
+            this.cameraVertical = function() {
+                refs.camera.position.set(128.995298556282584, 1590.220515894183, 332.2017210835472);
+                refs.camera.rotation.set(-Math.PI / 2, 0, -Math.PI);
+            }
         };
+
+        let refs = this;
 
         this.debugCount = 0;
 
         this.testResults = [];
-        this.dynamicData = true;
+        this.dynamicData = false;
 
         let updateParametersValue = (parametersGroup, parameterName, value) => {
             this[parametersGroup][parameterName] = value;
@@ -315,7 +338,10 @@ class ViewArea extends Component {
                 updateCSMParametersValue('enabled', value);
             });
             let splitCount = gui.add(parameters, 'splitCount').min(1).max(10).step(1);
-            splitCount.onChange((value) => {
+            /*splitCount.onChange((value) => {
+                updateCSMParametersValue('splitCount', value);
+            });*/
+            splitCount.onFinishChange((value) => {
                 updateCSMParametersValue('splitCount', value);
             });
             let splitType = gui.add(parameters, 'splitType', ["logarithmic", "linear", "mixed"]);
@@ -331,7 +357,7 @@ class ViewArea extends Component {
                 updateCSMParametersValue('splitLambda', value);
             });
 
-            //gui.add(parameters, 'cascadesBlendingFactor').min(0.0).max(1.0).step(0.001);
+            gui.add(parameters, 'cascadesBlendingFactor').min(0.0).max(1.0).step(0.001);
 
             let displayBorders = gui.add(parameters, 'displayBorders');
             displayBorders.onFinishChange((value) => {
@@ -346,6 +372,8 @@ class ViewArea extends Component {
                 updateCSMParametersValue('displayPixels', value);
             });
             gui.add(parameters, 'debugStop');
+            gui.add(parameters, 'cameraParallel');
+            gui.add(parameters, 'cameraVertical');
             gui.add(parameters, 'addFrustum');
             gui.add(parameters, 'runPrecisionTest');
 
@@ -441,6 +469,8 @@ class ViewArea extends Component {
             0, 0, 0, 1
         ]);
 
+        this.angle = Math.PI / 2;
+
         let then = 0;
         const renderLoopTick = (now) => {
             this.debugCount++;
@@ -449,87 +479,34 @@ class ViewArea extends Component {
             then = now;
 
             if (this.testIdx !== undefined) {
-                switch (this.currentAlgorithm) {
-                    case "USM":
-                        if (this.testIdx === this.USMTestParameters.length) {
-                            this.currentAlgorithm = "CSM";
-                            this.testIdx = 0;
-                        } else {
-                            this.stableCSMParameters.enabled = false;
-                            this.LiSPSMParameters.enabled = false;
-                            this.CSMParameters.splitCount = 1;
-                            this.CSMParameters.textureResolution = this.USMTestParameters[this.testIdx].textureResolution;
-                            let pos = this.USMTestParameters[this.testIdx].position;
-                            this.camera.position.set(pos.x, pos.y, pos.z);
-                            let rot = this.USMTestParameters[this.testIdx].rotation;
-                            this.camera.rotation.set(rot.x, rot.y, rot.z);
-                            this.testIdx++;
-                        }
-                        break;
-                    case "CSM":
-                        if (this.testIdx === this.CSMTestParameters.length) {
-                            this.currentAlgorithm = "StableCSM";
-                            this.testIdx = 0;
-                        } else {
-                            // yes code duplication is Bad. i know.
-                            this.stableCSMParameters.enabled = false;
-                            this.LiSPSMParameters.enabled = false;
-                            this.CSMParameters.textureResolution = this.CSMTestParameters[this.testIdx].textureResolution;
-                            this.CSMParameters.splitCount = this.CSMTestParameters[this.testIdx].splitCount;
-                            this.CSMParameters.splitLambda = this.CSMTestParameters[this.testIdx].splitLambda;
-                            let pos = this.CSMTestParameters[this.testIdx].position;
-                            this.camera.position.set(pos.x, pos.y, pos.z);
-                            let rot = this.CSMTestParameters[this.testIdx].rotation;
-                            this.camera.rotation.set(rot.x, rot.y, rot.z);
-                            this.testIdx++;
-                        }
-                        break;
-                    case "StableCSM":
-                        if (this.testIdx === this.stableCSMTestParameters.length) {
-                            this.currentAlgorithm = "LiSPSM";
-                            this.testIdx = 0;
-                        } else {
-                            this.stableCSMParameters.enabled = true;
-                            this.LiSPSMParameters.enabled = false;
-                            this.CSMParameters.textureResolution = this.stableCSMTestParameters[this.testIdx].textureResolution;
-                            this.CSMParameters.splitCount = this.stableCSMTestParameters[this.testIdx].splitCount;
-                            this.CSMParameters.splitLambda = this.stableCSMTestParameters[this.testIdx].splitLambda;
-                            this.stableCSMParameters.firstTextureSize = this.stableCSMTestParameters[this.testIdx].firstTextureSize;
-                            this.stableCSMParameters.projectedAreaSide = this.stableCSMTestParameters[this.testIdx].projectedAreaSide;
-                            let pos = this.stableCSMTestParameters[this.testIdx].position;
-                            this.camera.position.set(pos.x, pos.y, pos.z);
-                            let rot = this.stableCSMTestParameters[this.testIdx].rotation;
-                            this.camera.rotation.set(rot.x, rot.y, rot.z);
-                            this.testIdx++;
-                        }
-                        break;
-                    case "LiSPSM":
-                        if (this.testIdx === this.LiSPSMTestParameters.length) {
-                            this.currentAlgorithm = undefined;
-                            this.testIdx = undefined;
-                            saveText(JSON.stringify(this.testResults), `res.json`);
-                            this.testResults = [];
-                        } else {
-                            this.stableCSMParameters.enabled = false;
-                            this.LiSPSMParameters.enabled = true;
-                            this.CSMParameters.splitCount = 1;
-                            this.CSMParameters.textureResolution = this.LiSPSMTestParameters[this.testIdx].textureResolution;
-                            let pos = this.LiSPSMTestParameters[this.testIdx].position;
-                            this.camera.position.set(pos.x, pos.y, pos.z);
-                            let rot = this.LiSPSMTestParameters[this.testIdx].rotation;
-                            this.camera.rotation.set(rot.x, rot.y, rot.z);
-                            this.testIdx++;
-                        }
-                        break;
-                }
+                this.runPrecisionTest();
             }
 
             this.resizeTextures();
             this.updateMaterialUniformsFromParameters();
 
             if (this.dynamicData && this.objects !== undefined) {
-                for (let i = 0; i < this.objects.length; i++) {
-                    this.objects[i].position.add(this.directions[i]);
+                if (!this.decalParameters.enabled) {
+                    for (let i = 0; i < this.objects.length; i++) {
+                        this.objects[i].position.add(this.directions[i]);
+                    }
+                } else {
+                    for (let i = 0; i < this.decalParameters.decals.length; i++) {
+                        this.decalParameters.decals[i].position.add(this.directions[i]);
+                        switch (this.decalParameters.decals[i].material.uniforms.mode.value) {
+                            case 0:
+                                this.decalParameters.decals[i].material.uniforms.triangleVertices.value.forEach(it => it.add(new THREE.Vector2(this.directions[i].x, this.directions[i].z)));
+                                break;
+                            case 1:
+                            case 2:
+                                this.decalParameters.decals[i].material.uniforms.quadVertices.value.forEach(it => it.add(new THREE.Vector2(this.directions[i].x, this.directions[i].z)));
+                                break;
+                            case 3:
+                                this.decalParameters.decals[i].material.uniforms.circleCenter.value.add(new THREE.Vector2(this.directions[i].x, this.directions[i].z));
+                                break;
+
+                        }
+                    }
                 }
             }
 
@@ -537,8 +514,21 @@ class ViewArea extends Component {
                 this.runPerformanceTest(stats);
             }
 
-            if (this.precisionTestParameters.running) {
-                this.runPrecisionTest(this.precisionTestParameters.currentAttribute);
+            if (this.rolling) {
+                let y = this.camera.position.y;
+                let z = this.camera.position.z;
+                this.angle -= Math.PI / 400;
+                this.camera.position.y = -z * Math.sin(-Math.PI / 400) + y * Math.cos(-Math.PI / 400);
+                this.camera.position.z = z * Math.cos(-Math.PI / 400) + y * Math.sin(-Math.PI / 400);
+                this.camera.rotation.x -= Math.PI / 400;
+                let geom = new THREE.Geometry();
+                geom.vertices.push(this.camera.position);
+                this.scene.add(new THREE.Points(geom, new THREE.PointsMaterial({size: 50, color: 'magenta'})));
+                if (this.camera.rotation.x <= -Math.PI) {
+                    this.rolling = false;
+                    saveText(JSON.stringify(this.testResults), `res.json`);
+                    this.testResults = [];
+                }
             }
 
             if (this.CSMParameters.enabled) {
@@ -560,8 +550,6 @@ class ViewArea extends Component {
                 }
                 this.createSplitCameras();
                 this.createTextureMatrices();
-
-                this.stableCSMParameters.enabled = false;
 
                 for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
                     if (this.LiSPSMParameters.enabled) {
@@ -598,12 +586,14 @@ class ViewArea extends Component {
                         splitLambda: this.CSMParameters.splitLambda,
                         projectedAreaSide: this.stableCSMParameters.projectedAreaSide,
                         firstTextureSize: this.stableCSMParameters.firstTextureSize,
+                        angle: THREE.Math.radToDeg(this.angle),
                         avg: sum / cnt});
 
                 } else if (this.LiSPSMParameters.enabled) {
                     this.testResults.push({
                         type: "LiSPSM",
                         resolution: this.CSMParameters.textureResolution,
+                        angle: THREE.Math.radToDeg(this.angle),
                         avg: sum / cnt
                     });
                 } else if (this.CSMParameters.splitCount > 1) {
@@ -612,12 +602,14 @@ class ViewArea extends Component {
                         resolution: this.CSMParameters.textureResolution,
                         splitCount: this.CSMParameters.splitCount,
                         splitLambda: this.CSMParameters.splitLambda,
+                        angle: THREE.Math.radToDeg(this.angle),
                         avg: sum / cnt
                     });
                 } else if (this.CSMParameters.splitCount === 1) {
                     this.testResults.push({
                         type: "USM",
                         resolution: this.CSMParameters.textureResolution,
+                        angle: THREE.Math.radToDeg(this.angle),
                         avg: sum / cnt
                     });
                 }
@@ -768,9 +760,10 @@ class ViewArea extends Component {
             },
             textureMatrices: {type: "m4v", value: new Array(this.constants.maxSplitCount).fill(new THREE.Matrix4())},
 
-            //cascadesBlendingFactor: {type: "f", value: this.CSMParameters.cascadesBlendingFactor},
+            cascadesBlendingFactor: {type: "f", value: this.CSMParameters.cascadesBlendingFactor},
             // uniforms that need updates from GUI
-            splitCount: {type: "i", value: this.CSMParameters.splitCount},displayBorders: {type: "i", value: 0},
+            splitCount: {type: "i", value: this.CSMParameters.splitCount},
+            displayBorders: {type: "i", value: 0},
             enableCSM: {type: "i", value: 1},
             displayPixelAreas: {type: "i", value: 0},
             resolution: {type: "f", value: this.CSMParameters.textureResolution}, // it doubles as both width and height of the texture
@@ -798,47 +791,18 @@ class ViewArea extends Component {
         this.scene.add(plane);
         this.zScene.add(renderPlane);
 
-        const decalDiffuse = textureLoader.load('src/textures/decal-diffuse.png');
-        const decalNormal = textureLoader.load('src/textures/decal-normal.jpg');
-
-        const decalMaterial = new THREE.MeshPhongMaterial({
-            specular: 0x444444,
-            map: decalDiffuse,
-            normalMap: decalNormal,
-            normalScale: new THREE.Vector2(1, 1),
-            shininess: 30,
-            transparent: true,
-            depthTest: true,
-            depthWrite: false,
-            polygonOffset: true,
-            polygonOffsetFactor: -4,
-            wireframe: false,
-            color: 'magenta'
-        });
-
-
-        let pointsData = [
-            new THREE.Vector3(-200, -50, 200),
-            new THREE.Vector3(200, -50, 100),
-            new THREE.Vector3(-50, -50, -50)
-        ];
-        let pgeom = new THREE.Geometry();
-        pointsData.forEach(it => pgeom.vertices.push(it));
-
-        this.scene.add(new THREE.Points(pgeom, new THREE.PointsMaterial({color: 'cyan', size: 50})));
-
         return plane;
     }
 
     initBufferTextures() {
-        for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
+        for (let i = 0; i < this.constants.maxSplitCount; ++i) {
             this.bufferTextures[i] = new THREE.WebGLRenderTarget(this.CSMParameters.textureResolution, this.CSMParameters.textureResolution, {
                 minFilter: THREE.NearestFilter,
                 magFilter: THREE.NearestFilter
             });
         }
         this.loadBufferTexture();
-        // this.generateBufferTextureObjects(2000);
+        // this.generateBufferTextureObjects(objectCount);
     }
 
     loadBufferTexture() {
@@ -863,7 +827,7 @@ class ViewArea extends Component {
             mesh.rotation.set(-Math.PI / 2, 0, 0);
             this.objects.push(mesh);
             // add a direction for each object
-            this.directions.push(new THREE.Vector3(Math.random() > 0.5 ? 1 : -1, Math.random() > 0.5 ? 1 : -1, Math.random() > 0.5 ? 1 : -1))
+            this.directions.push(new THREE.Vector3(Math.random() > 0.5 ? 1 : -1, 0, Math.random() > 0.5 ? 1 : -1))
             this.bufferScene.add(mesh);
         }
     }
@@ -883,6 +847,7 @@ class ViewArea extends Component {
             this.stableCSMParameters.projectedAreaSide
         );
 
+        this.splitCameras = [];
         for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
             let currentCamera = new THREE.PerspectiveCamera(this.camera.fov, this.camera.aspect, this.CSMParameters.maxSplitDistances[i], this.CSMParameters.maxSplitDistances[i + 1]);
             /*currentCamera.near = 1;
@@ -904,7 +869,7 @@ class ViewArea extends Component {
 
     createTextureMatrices() {
         let matrices = new Array(this.constants.maxSplitCount).fill(new THREE.Matrix4());
-        for (let i = 0; i < this.splitCameras.length; ++i) {
+        for (let i = 0; i < this.CSMParameters.splitCount; ++i) {
             let m = this.splitCameras[i].projectionMatrix.clone();
             m.multiply(this.splitCameras[i].matrixWorldInverse);
             matrices[i] = m;
@@ -970,7 +935,8 @@ class ViewArea extends Component {
         if (pattern !== undefined) {
             material.uniforms.quadTexture.value = pattern;
         } else {
-            material.uniforms.color.value = new THREE.Vector4(Math.random(), Math.random(), Math.random(), 1);
+            // material.uniforms.color.value = new THREE.Vector4(Math.random(), Math.random(), Math.random(), 1);
+            material.uniforms.color.value = new THREE.Vector4(0.2, 0.4, 0.2, 1);
         }
 
         let mesh = new THREE.Mesh(geom, material);
@@ -1027,33 +993,17 @@ class ViewArea extends Component {
             this.performanceTestParameters.testCameraDataIndex = 0;
         }
     }
-
-
-
-    precisionTestParameters = {
-        running: false,
-        textureResolution: [],
-        splitCount: [],
-        projectedAreaSide: [],
-        splitLambda: [],
-        textureResolutionIndex: -1,
-        splitLambdaIndex: -1,
-        splitCountIndex: -1,
-        projectedAreaSideIndex: -1,
-        currentAttribute: null
-    }
-
     generateParameters() {
         const resolutions = [512, 768, 1024, 1536, 2048];
         const positions = [
             new THREE.Vector3(1000, 1000, 800),
-            new THREE.Vector3(11.15, 1600.56, 279.46),
-            new THREE.Vector3(-10, 91.3, -1622.2)
+            // new THREE.Vector3(28.995298556282584, 1590.220515894183, 332.2017210835472),
+            // new THREE.Vector3(-281.2751217936437, 145.92038086772592, -1593.6095972060978)
         ];
         const rotations = [
             new THREE.Euler(-0.896, 0.663, 0.656),
-            new THREE.Euler(-1.398, 0.007, 0.039),
-            new THREE.Euler(-3.085 , 0.006, -3.141)
+            // new THREE.Euler(-1.364855099205966, 0.017846319954118763, 0.0852173507643245),
+            // new THREE.Euler(-3.0502813274673066, -0.17398938616256215, -3.1257427360893026)
         ];
         const splits = [3, 4, 5, 7, 10];
         const splitLambdas = [0, 0.25, 0.5, 0.75, 1];
@@ -1066,7 +1016,7 @@ class ViewArea extends Component {
         this.LiSPSMTestParameters = [];
 
         // USM parameters
-        for (let res of resolutions) {
+        /*for (let res of resolutions) {
             for (let i = 0; i < positions.length; i++) {
                 this.USMTestParameters.push({
                     textureResolution: res,
@@ -1074,7 +1024,7 @@ class ViewArea extends Component {
                     rotation: rotations[i]
                 });
             }
-        }
+        }*/
 
         // CSM parameters
         for (let res of resolutions) {
@@ -1094,7 +1044,7 @@ class ViewArea extends Component {
         }
 
         // stable CSM parameters
-        for (let res of resolutions) {
+        /*for (let res of resolutions) {
             for (let split of splits) {
                 for (let lambda of splitLambdas) {
                     for (let side of projectedAreaSides) {
@@ -1114,7 +1064,7 @@ class ViewArea extends Component {
                     }
                 }
             }
-        }
+        }*/
 
         // LiSPSM parameters are so far exactly the same. test LiSPSM + CSM later
         this.LiSPSMTestParameters = this.USMTestParameters;
@@ -1122,6 +1072,82 @@ class ViewArea extends Component {
         this.testIdx = 0;
         this.currentAlgorithm = 'USM';
 
+    }
+
+    runPrecisionTest() {
+        switch (this.currentAlgorithm) {
+            case "USM":
+                if (this.testIdx === this.USMTestParameters.length) {
+                    this.currentAlgorithm = "CSM";
+                    this.testIdx = 0;
+                } else {
+                    this.stableCSMParameters.enabled = false;
+                    this.LiSPSMParameters.enabled = false;
+                    this.CSMParameters.splitCount = 1;
+                    this.CSMParameters.textureResolution = this.USMTestParameters[this.testIdx].textureResolution;
+                    let pos = this.USMTestParameters[this.testIdx].position;
+                    this.camera.position.set(pos.x, pos.y, pos.z);
+                    let rot = this.USMTestParameters[this.testIdx].rotation;
+                    this.camera.rotation.set(rot.x, rot.y, rot.z);
+                    this.testIdx++;
+                }
+                break;
+            case "CSM":
+                if (this.testIdx === this.CSMTestParameters.length) {
+                    this.currentAlgorithm = "StableCSM";
+                    this.testIdx = 0;
+                } else {
+                    // yes code duplication is Bad. i know.
+                    this.stableCSMParameters.enabled = false;
+                    this.LiSPSMParameters.enabled = false;
+                    this.CSMParameters.textureResolution = this.CSMTestParameters[this.testIdx].textureResolution;
+                    this.CSMParameters.splitCount = this.CSMTestParameters[this.testIdx].splitCount;
+                    this.CSMParameters.splitLambda = this.CSMTestParameters[this.testIdx].splitLambda;
+                    let pos = this.CSMTestParameters[this.testIdx].position;
+                    this.camera.position.set(pos.x, pos.y, pos.z);
+                    let rot = this.CSMTestParameters[this.testIdx].rotation;
+                    this.camera.rotation.set(rot.x, rot.y, rot.z);
+                    this.testIdx++;
+                }
+                break;
+            case "StableCSM":
+                if (this.testIdx === this.stableCSMTestParameters.length) {
+                    this.currentAlgorithm = "LiSPSM";
+                    this.testIdx = 0;
+                } else {
+                    this.stableCSMParameters.enabled = true;
+                    this.LiSPSMParameters.enabled = false;
+                    this.CSMParameters.textureResolution = this.stableCSMTestParameters[this.testIdx].textureResolution;
+                    this.CSMParameters.splitCount = this.stableCSMTestParameters[this.testIdx].splitCount;
+                    this.CSMParameters.splitLambda = this.stableCSMTestParameters[this.testIdx].splitLambda;
+                    this.stableCSMParameters.firstTextureSize = this.stableCSMTestParameters[this.testIdx].firstTextureSize;
+                    this.stableCSMParameters.projectedAreaSide = this.stableCSMTestParameters[this.testIdx].projectedAreaSide;
+                    let pos = this.stableCSMTestParameters[this.testIdx].position;
+                    this.camera.position.set(pos.x, pos.y, pos.z);
+                    let rot = this.stableCSMTestParameters[this.testIdx].rotation;
+                    this.camera.rotation.set(rot.x, rot.y, rot.z);
+                    this.testIdx++;
+                }
+                break;
+            case "LiSPSM":
+                if (this.testIdx === this.LiSPSMTestParameters.length) {
+                    this.currentAlgorithm = undefined;
+                    this.testIdx = undefined;
+                    saveText(JSON.stringify(this.testResults), `res.json`);
+                    this.testResults = [];
+                } else {
+                    this.stableCSMParameters.enabled = false;
+                    this.LiSPSMParameters.enabled = true;
+                    this.CSMParameters.splitCount = 1;
+                    this.CSMParameters.textureResolution = this.LiSPSMTestParameters[this.testIdx].textureResolution;
+                    let pos = this.LiSPSMTestParameters[this.testIdx].position;
+                    this.camera.position.set(pos.x, pos.y, pos.z);
+                    let rot = this.LiSPSMTestParameters[this.testIdx].rotation;
+                    this.camera.rotation.set(rot.x, rot.y, rot.z);
+                    this.testIdx++;
+                }
+                break;
+        }
     }
 }
 
